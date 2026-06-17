@@ -1,0 +1,833 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>医院挂号系统</title>
+    <!-- Bootstrap 5 -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Bootstrap Icons -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
+    <!-- SweetAlert2 -->
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <style>
+        :root {
+            --primary-color: #2563eb;
+            --success-color: #10b981;
+            --warning-color: #f59e0b;
+            --danger-color: #ef4444;
+        }
+
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+        }
+
+        .navbar {
+            background: rgba(255, 255, 255, 0.95) !important;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 2px 20px rgba(0,0,0,0.1);
+        }
+
+        .card {
+            border: none;
+            border-radius: 16px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 20px 60px rgba(0,0,0,0.15);
+        }
+
+        .card-header {
+            border-radius: 16px 16px 0 0 !important;
+            padding: 1rem 1.5rem;
+        }
+
+        .btn-primary {
+            background: var(--primary-color);
+            border: none;
+            border-radius: 10px;
+            padding: 0.75rem 1.5rem;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+
+        .btn-primary:hover {
+            background: #1d4ed8;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(37, 99, 235, 0.4);
+        }
+
+        .btn-success {
+            background: var(--success-color);
+            border: none;
+            border-radius: 10px;
+        }
+
+        .btn-warning {
+            background: var(--warning-color);
+            border: none;
+            border-radius: 10px;
+        }
+
+        .doctor-card {
+            background: white;
+            border-radius: 12px;
+            padding: 1rem;
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            transition: all 0.3s ease;
+        }
+
+        .doctor-card:hover {
+            background: #f8fafc;
+        }
+
+        .doctor-avatar {
+            width: 48px;
+            height: 48px;
+            background: linear-gradient(135deg, var(--primary-color), #818cf8);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+            font-size: 1.2rem;
+        }
+
+        .queue-item {
+            background: white;
+            border-radius: 10px;
+            padding: 0.75rem 1rem;
+            margin-bottom: 0.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-left: 4px solid var(--primary-color);
+            animation: slideIn 0.3s ease;
+        }
+
+        .queue-item.emergency {
+            border-left-color: var(--danger-color);
+            background: #fef2f2;
+        }
+
+        .queue-item.urgent {
+            border-left-color: var(--warning-color);
+            background: #fffbeb;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateX(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        .priority-badge {
+            padding: 0.25rem 0.75rem;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        .priority-normal {
+            background: #dbeafe;
+            color: #1e40af;
+        }
+
+        .priority-urgent {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        .priority-emergency {
+            background: #fecaca;
+            color: #991b1b;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+
+        .stats-number {
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--primary-color);
+        }
+
+        .form-control, .form-select {
+            border-radius: 10px;
+            padding: 0.75rem 1rem;
+            border: 2px solid #e2e8f0;
+            transition: all 0.3s ease;
+        }
+
+        .form-control:focus, .form-select:focus {
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+        }
+
+        .call-next-btn {
+            background: linear-gradient(135deg, var(--success-color), #059669);
+            border: none;
+            border-radius: 10px;
+            padding: 0.5rem 1rem;
+            color: white;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+
+        .call-next-btn:hover {
+            transform: scale(1.05);
+            box-shadow: 0 5px 20px rgba(16, 185, 129, 0.4);
+            color: white;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 2rem;
+            color: #94a3b8;
+        }
+
+        .empty-state i {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+        }
+
+        .live-indicator {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            background: var(--success-color);
+            border-radius: 50%;
+            margin-right: 0.5rem;
+            animation: blink 1.5s infinite;
+        }
+
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+        }
+    </style>
+</head>
+<body>
+    <!-- 导航栏 -->
+    <nav class="navbar navbar-expand-lg navbar-light">
+        <div class="container">
+            <a class="navbar-brand fw-bold" href="#">
+                <i class="bi bi-hospital text-primary"></i> 医院挂号系统
+            </a>
+            <div class="d-flex align-items-center">
+                <span class="badge bg-success rounded-pill px-3 py-2">
+                    <span class="live-indicator"></span>
+                    系统运行中
+                </span>
+            </div>
+        </div>
+    </nav>
+
+    <!-- 主内容 -->
+    <div class="container py-4">
+        <!-- 统计卡片 -->
+        <div class="row mb-4">
+            <div class="col-md-4 mb-3">
+                <div class="card">
+                    <div class="card-body text-center">
+                        <div class="stats-number" id="totalDoctors">-</div>
+                        <div class="text-muted">当班医生</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4 mb-3">
+                <div class="card">
+                    <div class="card-body text-center">
+                        <div class="stats-number" id="totalWaiting">-</div>
+                        <div class="text-muted">等候患者</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4 mb-3">
+                <div class="card">
+                    <div class="card-body text-center">
+                        <div class="stats-number" id="avgWaitTime">-</div>
+                        <div class="text-muted">平均等待(分钟)</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row">
+            <!-- 左侧：挂号终端 -->
+            <div class="col-lg-5 mb-4">
+                <div class="card h-100">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="mb-0"><i class="bi bi-person-plus"></i> 挂号终端</h5>
+                    </div>
+                    <div class="card-body">
+                        <!-- 患者信息 -->
+                        <h6 class="fw-bold mb-3"><i class="bi bi-person"></i> 患者信息</h6>
+                        <div class="row mb-3">
+                            <div class="col-8">
+                                <input type="text" class="form-control" id="patientName" placeholder="患者姓名" required>
+                            </div>
+                            <div class="col-4">
+                                <button type="button" class="btn btn-outline-primary w-100" onclick="findOrCreatePatient()">
+                                    <i class="bi bi-search"></i> 查询/注册
+                                </button>
+                            </div>
+                        </div>
+                        <div id="patientInfo" class="alert alert-info d-none mb-3">
+                            <i class="bi bi-person-check"></i> 患者: <strong id="patientNameDisplay"></strong>
+                            <span class="ms-2 badge bg-primary" id="patientIdBadge"></span>
+                        </div>
+
+                        <hr>
+
+                        <!-- 挂号表单 -->
+                        <form id="appointmentForm">
+                            <input type="hidden" id="patientId" value="">
+                            <div class="mb-3">
+                                <label class="form-label fw-semibold">就诊科室</label>
+                                <select class="form-select" id="department" required>
+                                    <option value="">请选择科室</option>
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label fw-semibold">指定医生（可选）</label>
+                                <select class="form-select" id="doctorId">
+                                    <option value="">自动分配</option>
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <div class="form-check form-switch">
+                                    <input class="form-check-input" type="checkbox" id="isUrgent">
+                                    <label class="form-check-label fw-semibold" for="isUrgent">
+                                        <i class="bi bi-exclamation-triangle text-warning"></i> 加急就诊
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="mb-3">
+                                <div class="form-check form-switch">
+                                    <input class="form-check-input" type="checkbox" id="isEmergency">
+                                    <label class="form-check-label fw-semibold" for="isEmergency">
+                                        <i class="bi bi-lightning-charge text-danger"></i> 急诊
+                                    </label>
+                                </div>
+                            </div>
+                            <button type="submit" class="btn btn-primary w-100" id="submitBtn" disabled>
+                                <i class="bi bi-check-circle"></i> 确认挂号
+                            </button>
+                        </form>
+
+                        <hr>
+
+                        <!-- 现有患者快速选择 -->
+                        <h6 class="fw-bold mb-3"><i class="bi bi-people"></i> 快速选择患者</h6>
+                        <div id="patientList" class="d-flex flex-wrap gap-2">
+                            <!-- 动态加载 -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 右侧：医生叫号台 & 排队大屏 -->
+            <div class="col-lg-7">
+                <!-- 医生叫号台 -->
+                <div class="card mb-4">
+                    <div class="card-header bg-success text-white">
+                        <h5 class="mb-0"><i class="bi bi-person-workspace"></i> 医生叫号台</h5>
+                    </div>
+                    <div class="card-body" id="doctorList">
+                        <div class="empty-state">
+                            <i class="bi bi-hourglass-split"></i>
+                            <p>正在加载医生列表...</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 排队大屏 -->
+                <div class="card">
+                    <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0"><i class="bi bi-display"></i> 排队大屏</h5>
+                        <select class="form-select form-select-sm w-auto" id="queueDoctorSelect" onchange="refreshQueue(this.value)">
+                            <option value="">选择医生查看队列</option>
+                        </select>
+                    </div>
+                    <div class="card-body" id="queueDisplay">
+                        <div class="empty-state">
+                            <i class="bi bi-people"></i>
+                            <p>选择医生查看排队情况</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+    <script>
+        // API 基础地址
+        const API_BASE = '';
+
+        // 科室列表
+        const DEPARTMENTS = [
+            '内科', '外科', '妇产科', '儿科', '急诊科',
+            '眼科', '口腔科', '皮肤科'
+        ];
+
+        // 医生列表缓存
+        let doctorsList = [];
+
+        // 当前选中的患者
+        let currentPatient = null;
+
+        // 页面加载时初始化
+        document.addEventListener('DOMContentLoaded', () => {
+            initDepartments();
+            loadDoctors();
+            loadPatients();
+        });
+
+        // 初始化科室下拉框
+        function initDepartments() {
+            const select = document.getElementById('department');
+            DEPARTMENTS.forEach(dept => {
+                const option = document.createElement('option');
+                option.value = dept;
+                option.textContent = dept;
+                select.appendChild(option);
+            });
+        }
+
+        // 加载医生列表
+        async function loadDoctors() {
+            try {
+                const response = await fetch(`${API_BASE}/api/doctors`);
+                if (!response.ok) throw new Error('加载失败');
+
+                doctorsList = await response.json();
+                renderDoctorList(doctorsList);
+                updateDoctorSelect(doctorsList);
+                updateStats(doctorsList);
+            } catch (error) {
+                console.error('加载医生列表失败:', error);
+                document.getElementById('doctorList').innerHTML = `
+                    <div class="empty-state">
+                        <i class="bi bi-exclamation-circle text-danger"></i>
+                        <p>加载失败，请刷新重试</p>
+                    </div>
+                `;
+            }
+        }
+
+        // 渲染医生列表
+        function renderDoctorList(doctors) {
+            const container = document.getElementById('doctorList');
+
+            if (doctors.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <i class="bi bi-person-x"></i>
+                        <p>暂无当班医生</p>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = doctors.map(doc => `
+                <div class="doctor-card">
+                    <div class="d-flex align-items-center">
+                        <div class="doctor-avatar">${doc.name.charAt(0)}</div>
+                        <div class="ms-3">
+                            <div class="fw-bold">${doc.name}</div>
+                            <small class="text-muted">${doc.department} · ${doc.title || '医师'}</small>
+                        </div>
+                    </div>
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="badge ${doc.current_patients >= doc.max_patients ? 'bg-danger' : 'bg-info'} rounded-pill">
+                            ${doc.current_patients}/${doc.max_patients}
+                        </span>
+                        <button class="call-next-btn btn-sm" onclick="callNext(${doc.id}, '${doc.name}')">
+                            <i class="bi bi-megaphone"></i> 叫号
+                        </button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // 更新医生选择下拉框
+        function updateDoctorSelect(doctors) {
+            const select = document.getElementById('queueDoctorSelect');
+            const doctorIdSelect = document.getElementById('doctorId');
+
+            // 清空旧选项（保留第一个）
+            select.innerHTML = '<option value="">选择医生查看队列</option>';
+            doctorIdSelect.innerHTML = '<option value="">自动分配</option>';
+
+            doctors.forEach(doc => {
+                // 队列选择框
+                const option1 = document.createElement('option');
+                option1.value = doc.id;
+                option1.textContent = `${doc.name} (${doc.department})`;
+                select.appendChild(option1);
+
+                // 挂号表单医生选择框
+                const option2 = document.createElement('option');
+                option2.value = doc.id;
+                option2.textContent = `${doc.name} (${doc.department})`;
+                doctorIdSelect.appendChild(option2);
+            });
+        }
+
+        // 更新统计数据
+        function updateStats(doctors) {
+            document.getElementById('totalDoctors').textContent = doctors.length;
+
+            const totalWaiting = doctors.reduce((sum, doc) => sum + doc.current_patients, 0);
+            document.getElementById('totalWaiting').textContent = totalWaiting;
+
+            // 简单估算平均等待时间
+            const avgWait = totalWaiting > 0 ? Math.round(totalWaiting * 10 / doctors.length) : 0;
+            document.getElementById('avgWaitTime').textContent = avgWait;
+        }
+
+        // 加载患者列表
+        async function loadPatients() {
+            try {
+                const response = await fetch(`${API_BASE}/api/patients`);
+                if (response.ok) {
+                    const patients = await response.json();
+                    renderPatientList(patients);
+                }
+            } catch (error) {
+                console.log('加载患者列表失败');
+            }
+        }
+
+        // 渲染患者快速选择列表
+        function renderPatientList(patients) {
+            const container = document.getElementById('patientList');
+            container.innerHTML = patients.map(p => `
+                <button class="btn btn-outline-secondary btn-sm" onclick="selectPatient(${p.id}, '${p.name}')">
+                    ${p.name} (${p.id})
+                </button>
+            `).join('');
+        }
+
+        // 查询或注册患者
+        async function findOrCreatePatient() {
+            const name = document.getElementById('patientName').value.trim();
+            if (!name) {
+                Swal.fire({
+                    icon: 'warning',
+                    title: '请输入患者姓名',
+                    confirmButtonColor: '#f59e0b'
+                });
+                return;
+            }
+
+            try {
+                // 尝试通过姓名查询（简化版，实际应该有搜索API）
+                // 这里我们直接注册新患者
+                const phone = '138' + String(Math.floor(Math.random() * 100000000)).padStart(8, '0');
+                const idCard = '11010119900101' + String(Math.floor(Math.random() * 10000)).padStart(4, '0');
+
+                const response = await fetch(`${API_BASE}/api/patients`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        name: name,
+                        phone: phone,
+                        id_card: idCard,
+                        age: Math.floor(Math.random() * 50) + 20,
+                        gender: Math.random() > 0.5 ? '男' : '女'
+                    })
+                });
+
+                if (response.ok) {
+                    const patient = await response.json();
+                    selectPatient(patient.id, patient.name);
+
+                    Swal.fire({
+                        icon: 'success',
+                        title: '患者注册成功',
+                        html: `
+                            <p><strong>${patient.name}</strong></p>
+                            <p>患者ID: ${patient.id}</p>
+                        `,
+                        confirmButtonColor: '#10b981'
+                    });
+                } else {
+                    throw new Error('注册失败');
+                }
+            } catch (error) {
+                Swal.fire({
+                    icon: 'error',
+                    title: '操作失败',
+                    text: error.message,
+                    confirmButtonColor: '#ef4444'
+                });
+            }
+        }
+
+        // 选择患者
+        function selectPatient(id, name) {
+            currentPatient = { id, name };
+            document.getElementById('patientId').value = id;
+            document.getElementById('patientName').value = name;
+            document.getElementById('patientNameDisplay').textContent = name;
+            document.getElementById('patientIdBadge').textContent = `ID: ${id}`;
+            document.getElementById('patientInfo').classList.remove('d-none');
+            document.getElementById('submitBtn').disabled = false;
+        }
+
+        // 提交挂号
+        document.getElementById('appointmentForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const patientId = document.getElementById('patientId').value;
+            const department = document.getElementById('department').value;
+            const doctorId = document.getElementById('doctorId').value;
+            const isUrgent = document.getElementById('isUrgent').checked;
+            const isEmergency = document.getElementById('isEmergency').checked;
+
+            // 确定优先级（后端要求小写）
+            let priority = 'normal';
+            if (isEmergency) priority = 'emergency';
+            else if (isUrgent) priority = 'urgent';
+
+            // 构建请求体
+            const body = {
+                patient_id: parseInt(patientId),
+                priority: priority
+            };
+
+            // 如果指定了医生
+            if (doctorId) {
+                body.doctor_id = parseInt(doctorId);
+            } else {
+                // 自动分流模式
+                body.department = department;
+            }
+
+            try {
+                const endpoint = doctorId ? '/api/appointments' : '/api/appointments/auto';
+                const response = await fetch(`${API_BASE}${endpoint}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                });
+
+                const result = await response.json();
+
+                if (response.ok) {
+                    await Swal.fire({
+                        icon: 'success',
+                        title: '挂号成功！',
+                        html: `
+                            <div class="text-start">
+                                <p><strong>挂号编号：</strong>${result.id || result.appointment_id}</p>
+                                <p><strong>排队号码：</strong>${result.queue_number}</p>
+                                <p><strong>优先级：</strong>${getPriorityText(priority)}</p>
+                                ${result.doctor_name ? `<p><strong>就诊医生：</strong>${result.doctor_name}</p>` : ''}
+                                ${result.department ? `<p><strong>就诊科室：</strong>${result.department}</p>` : ''}
+                            </div>
+                        `,
+                        confirmButtonColor: '#2563eb'
+                    });
+
+                    // 刷新医生列表
+                    loadDoctors();
+
+                    // 如果当前查看的是该医生的队列，刷新队列
+                    const queueSelect = document.getElementById('queueDoctorSelect');
+                    if (queueSelect.value) {
+                        refreshQueue(queueSelect.value);
+                    }
+                } else {
+                    throw new Error(result.error || '挂号失败');
+                }
+            } catch (error) {
+                Swal.fire({
+                    icon: 'error',
+                    title: '挂号失败',
+                    text: error.message,
+                    confirmButtonColor: '#ef4444'
+                });
+            }
+        });
+
+        // 叫号
+        async function callNext(doctorId, doctorName) {
+            try {
+                const response = await fetch(`${API_BASE}/api/doctors/${doctorId}/call_next`, {
+                    method: 'POST'
+                });
+
+                const result = await response.json();
+
+                if (response.ok) {
+                    // 大字弹出叫号信息
+                    await Swal.fire({
+                        title: '<strong>请就诊</strong>',
+                        html: `
+                            <div style="font-size: 1.5rem; margin: 1rem 0;">
+                                <div style="color: #2563eb; font-weight: bold; font-size: 2rem;">
+                                    ${result.patient_name || '患者'}
+                                </div>
+                                <div style="margin-top: 0.5rem;">
+                                    请到 <strong>${result.department || doctorName}</strong> 就诊
+                                </div>
+                            </div>
+                        `,
+                        icon: 'info',
+                        showConfirmButton: true,
+                        confirmButtonText: '确认',
+                        confirmButtonColor: '#2563eb',
+                        timer: 10000,
+                        timerProgressBar: true
+                    });
+
+                    // 刷新列表
+                    loadDoctors();
+
+                    // 刷新队列
+                    const queueSelect = document.getElementById('queueDoctorSelect');
+                    if (queueSelect.value == doctorId) {
+                        refreshQueue(doctorId);
+                    }
+                } else {
+                    throw new Error(result.error || '叫号失败');
+                }
+            } catch (error) {
+                Swal.fire({
+                    icon: 'warning',
+                    title: '叫号失败',
+                    text: error.message,
+                    confirmButtonColor: '#f59e0b'
+                });
+            }
+        }
+
+        // 刷新队列显示
+        async function refreshQueue(doctorId) {
+            if (!doctorId) {
+                document.getElementById('queueDisplay').innerHTML = `
+                    <div class="empty-state">
+                        <i class="bi bi-people"></i>
+                        <p>选择医生查看排队情况</p>
+                    </div>
+                `;
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_BASE}/api/doctors/${doctorId}/queue`);
+                if (!response.ok) throw new Error('加载失败');
+
+                const allQueue = await response.json();
+                // 只显示等待中的患者（过滤已完成和已取消的）
+                const queue = allQueue.filter(item => item.status === 'waiting');
+                renderQueue(queue, doctorId);
+            } catch (error) {
+                console.error('加载队列失败:', error);
+                document.getElementById('queueDisplay').innerHTML = `
+                    <div class="empty-state">
+                        <i class="bi bi-exclamation-circle text-danger"></i>
+                        <p>加载队列失败</p>
+                    </div>
+                `;
+            }
+        }
+
+        // 渲染队列
+        function renderQueue(queue, doctorId) {
+            const container = document.getElementById('queueDisplay');
+
+            if (!queue || queue.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <i class="bi bi-check-circle text-success"></i>
+                        <p>当前无排队患者</p>
+                    </div>
+                `;
+                return;
+            }
+
+            // 按优先级排序：Emergency > Urgent > Normal
+            const priorityOrder = { 'Emergency': 0, 'Urgent': 1, 'Normal': 2 };
+            queue.sort((a, b) => {
+                const pA = priorityOrder[a.priority] ?? 2;
+                const pB = priorityOrder[b.priority] ?? 2;
+                if (pA !== pB) return pA - pB;
+                return a.queue_number - b.queue_number;
+            });
+
+            container.innerHTML = `
+                <div class="mb-2 text-muted small">
+                    <i class="bi bi-info-circle"></i> 共 ${queue.length} 人排队
+                </div>
+                ${queue.map((item, index) => `
+                    <div class="queue-item ${item.priority.toLowerCase()}">
+                        <div class="d-flex align-items-center">
+                            <span class="fw-bold me-3" style="font-size: 1.2rem; color: #64748b;">
+                                #${item.queue_number}
+                            </span>
+                            <div>
+                                <div class="fw-semibold">${item.patient_name || `患者${item.patient_id}`}</div>
+                                <small class="text-muted">ID: ${item.patient_id}</small>
+                            </div>
+                        </div>
+                        <div class="d-flex align-items-center gap-2">
+                            <span class="priority-badge priority-${item.priority.toLowerCase()}">
+                                ${getPriorityText(item.priority)}
+                            </span>
+                            <span class="badge bg-light text-dark">
+                                约 ${(index + 1) * 10} 分钟
+                            </span>
+                        </div>
+                    </div>
+                `).join('')}
+            `;
+        }
+
+        // 获取优先级文本（支持大小写）
+        function getPriorityText(priority) {
+            const map = {
+                'normal': '普通',
+                'urgent': '加急',
+                'emergency': '急诊',
+                'Normal': '普通',
+                'Urgent': '加急',
+                'Emergency': '急诊'
+            };
+            return map[priority] || priority;
+        }
+
+        // 自动刷新（每30秒）
+        setInterval(() => {
+            loadDoctors();
+            const queueSelect = document.getElementById('queueDoctorSelect');
+            if (queueSelect.value) {
+                refreshQueue(queueSelect.value);
+            }
+        }, 30000);
+    </script>
+</body>
+</html>
