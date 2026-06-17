@@ -4,6 +4,7 @@
 #include "repository/IDoctorRepository.h"
 #include "repository/IAppointmentRepository.h"
 #include "service/IAppointmentService.h"
+#include "service/IInsuranceService.h"
 
 #include <httplib.h>
 #include <memory>
@@ -24,7 +25,8 @@ public:
         std::shared_ptr<IPatientRepository> patientRepo,
         std::shared_ptr<IDoctorRepository> doctorRepo,
         std::shared_ptr<IAppointmentRepository> appointmentRepo,
-        std::shared_ptr<IAppointmentService> appointmentService
+        std::shared_ptr<IAppointmentService> appointmentService,
+        std::shared_ptr<IInsuranceService> insuranceService = nullptr
     );
 
     /// 将所有路由注册到 httplib::Server
@@ -50,6 +52,9 @@ private:
     void handleCompleteAppointment(const httplib::Request& req, httplib::Response& res);
     void handleEstimateWaitTime(const httplib::Request& req, httplib::Response& res);
 
+    // ---- 结算相关 ----
+    void handleSettleAppointment(const httplib::Request& req, httplib::Response& res);
+
     // ---- 工具方法 ----
     /// 设置 JSON 响应头并写入 body
     static void setJsonResponse(httplib::Response& res, int status, const std::string& json);
@@ -60,6 +65,7 @@ private:
     std::shared_ptr<IDoctorRepository> doctorRepo_;
     std::shared_ptr<IAppointmentRepository> appointmentRepo_;
     std::shared_ptr<IAppointmentService> appointmentService_;
+    std::shared_ptr<IInsuranceService> insuranceService_;
 };
 
 } // namespace hospital

@@ -13,7 +13,7 @@ std::optional<Patient> MySQLPatientRepository::findById(int64_t id) {
     auto conn = pool_->getConnection();
 
     std::ostringstream sql;
-    sql << "SELECT id, name, phone, id_card, age, gender, "
+    sql << "SELECT id, name, phone, id_card, age, gender, insurance_type, "
         << "DATE_FORMAT(created_at, '%Y-%m-%d %H:%i:%s') AS created_at "
         << "FROM patients WHERE id = " << id;
 
@@ -39,7 +39,7 @@ std::optional<Patient> MySQLPatientRepository::findById(int64_t id) {
 std::vector<Patient> MySQLPatientRepository::findAll() {
     auto conn = pool_->getConnection();
 
-    const char* sql = "SELECT id, name, phone, id_card, age, gender, "
+    const char* sql = "SELECT id, name, phone, id_card, age, gender, insurance_type, "
                       "DATE_FORMAT(created_at, '%Y-%m-%d %H:%i:%s') AS created_at "
                       "FROM patients";
 
@@ -69,14 +69,16 @@ bool MySQLPatientRepository::save(Patient& entity) {
     std::string escaped_phone = escape(conn, entity.phone);
     std::string escaped_idcard = escape(conn, entity.id_card);
     std::string escaped_gender = escape(conn, entity.gender);
+    const char* insurance_str = insuranceTypeToString(entity.insurance_type);
 
     std::ostringstream sql;
-    sql << "INSERT INTO patients (name, phone, id_card, age, gender) VALUES ('"
+    sql << "INSERT INTO patients (name, phone, id_card, age, gender, insurance_type) VALUES ('"
         << escaped_name << "', '"
         << escaped_phone << "', '"
         << escaped_idcard << "', "
         << entity.age << ", '"
-        << escaped_gender << "')";
+        << escaped_gender << "', '"
+        << insurance_str << "')";
 
     if (mysql_query(conn.get(), sql.str().c_str()) != 0) {
         throw DatabaseException(std::string("插入患者失败: ") + mysql_error(conn.get()));
@@ -94,6 +96,7 @@ bool MySQLPatientRepository::update(const Patient& entity) {
     std::string escaped_phone = escape(conn, entity.phone);
     std::string escaped_idcard = escape(conn, entity.id_card);
     std::string escaped_gender = escape(conn, entity.gender);
+    const char* insurance_str = insuranceTypeToString(entity.insurance_type);
 
     std::ostringstream sql;
     sql << "UPDATE patients SET "
@@ -101,7 +104,8 @@ bool MySQLPatientRepository::update(const Patient& entity) {
         << "phone = '"    << escaped_phone  << "', "
         << "id_card = '"  << escaped_idcard << "', "
         << "age = "       << entity.age     << ", "
-        << "gender = '"   << escaped_gender << "' "
+        << "gender = '"   << escaped_gender << "', "
+        << "insurance_type = '" << insurance_str << "' "
         << "WHERE id = "  << entity.id;
 
     if (mysql_query(conn.get(), sql.str().c_str()) != 0) {
@@ -129,7 +133,7 @@ std::optional<Patient> MySQLPatientRepository::findByPhone(std::string_view phon
 
     std::string escaped = escape(conn, phone);
     std::ostringstream sql;
-    sql << "SELECT id, name, phone, id_card, age, gender, "
+    sql << "SELECT id, name, phone, id_card, age, gender, insurance_type, "
         << "DATE_FORMAT(created_at, '%Y-%m-%d %H:%i:%s') AS created_at "
         << "FROM patients WHERE phone = '" << escaped << "'";
 
@@ -157,7 +161,7 @@ std::optional<Patient> MySQLPatientRepository::findByIdCard(std::string_view id_
 
     std::string escaped = escape(conn, id_card);
     std::ostringstream sql;
-    sql << "SELECT id, name, phone, id_card, age, gender, "
+    sql << "SELECT id, name, phone, id_card, age, gender, insurance_type, "
         << "DATE_FORMAT(created_at, '%Y-%m-%d %H:%i:%s') AS created_at "
         << "FROM patients WHERE id_card = '" << escaped << "'";
 
@@ -185,7 +189,7 @@ std::vector<Patient> MySQLPatientRepository::searchByName(std::string_view keywo
 
     std::string escaped = escape(conn, keyword);
     std::ostringstream sql;
-    sql << "SELECT id, name, phone, id_card, age, gender, "
+    sql << "SELECT id, name, phone, id_card, age, gender, insurance_type, "
         << "DATE_FORMAT(created_at, '%Y-%m-%d %H:%i:%s') AS created_at "
         << "FROM patients WHERE name LIKE '%" << escaped << "%' LIMIT 10";
 
@@ -210,13 +214,14 @@ std::vector<Patient> MySQLPatientRepository::searchByName(std::string_view keywo
 
 Patient MySQLPatientRepository::parseRow(MYSQL_ROW row) {
     Patient p;
-    p.id         = row[0] ? std::stoll(row[0]) : 0;
-    p.name       = row[1] ? row[1] : "";
-    p.phone      = row[2] ? row[2] : "";
-    p.id_card    = row[3] ? row[3] : "";
-    p.age        = row[4] ? std::stoi(row[4]) : 0;
-    p.gender     = row[5] ? row[5] : "";
-    p.created_at = row[6] ? row[6] : "";
+    p.id             = row[0] ? std::stoll(row[0]) : 0;
+    p.name           = row[1] ? row[1] : "";
+    p.phone          = row[2] ? row[2] : "";
+    p.id_card        = row[3] ? row[3] : "";
+    p.age            = row[4] ? std::stoi(row[4]) : 0;
+    p.gender         = row[5] ? row[5] : "";
+    p.insurance_type = row[6] ? stringToInsuranceType(row[6]) : InsuranceType::Self;
+    p.created_at     = row[7] ? row[7] : "";
     return p;
 }
 

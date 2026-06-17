@@ -13,6 +13,7 @@ std::optional<Appointment> MySQLAppointmentRepository::findById(int64_t id) {
     auto conn = pool_->getConnection();
 
     const char* sql = "SELECT id, patient_id, doctor_id, status, priority, queue_number, "
+                      "registration_fee, insurance_fee, self_fee, settled, "
                       "DATE_FORMAT(created_at, '%Y-%m-%d %H:%i:%s') AS created_at "
                       "FROM appointments WHERE id = ?";
 
@@ -42,10 +43,11 @@ std::optional<Appointment> MySQLAppointmentRepository::findById(int64_t id) {
     }
 
     // 绑定结果
-    MYSQL_BIND result_bind[7] = {};
+    MYSQL_BIND result_bind[11] = {};
     long long r_id, r_patient_id, r_doctor_id;
     char r_status[20], r_priority[20];
-    int r_queue_number;
+    int r_queue_number, r_settled;
+    double r_registration_fee, r_insurance_fee, r_self_fee;
     char r_created_at[30];
     unsigned long r_status_len, r_priority_len, r_created_at_len;
 
@@ -65,10 +67,18 @@ std::optional<Appointment> MySQLAppointmentRepository::findById(int64_t id) {
     result_bind[4].length = &r_priority_len;
     result_bind[5].buffer_type = MYSQL_TYPE_LONG;
     result_bind[5].buffer = &r_queue_number;
-    result_bind[6].buffer_type = MYSQL_TYPE_STRING;
-    result_bind[6].buffer = r_created_at;
-    result_bind[6].buffer_length = sizeof(r_created_at);
-    result_bind[6].length = &r_created_at_len;
+    result_bind[6].buffer_type = MYSQL_TYPE_DOUBLE;
+    result_bind[6].buffer = &r_registration_fee;
+    result_bind[7].buffer_type = MYSQL_TYPE_DOUBLE;
+    result_bind[7].buffer = &r_insurance_fee;
+    result_bind[8].buffer_type = MYSQL_TYPE_DOUBLE;
+    result_bind[8].buffer = &r_self_fee;
+    result_bind[9].buffer_type = MYSQL_TYPE_LONG;
+    result_bind[9].buffer = &r_settled;
+    result_bind[10].buffer_type = MYSQL_TYPE_STRING;
+    result_bind[10].buffer = r_created_at;
+    result_bind[10].buffer_length = sizeof(r_created_at);
+    result_bind[10].length = &r_created_at_len;
 
     if (mysql_stmt_bind_result(stmt, result_bind) != 0) {
         mysql_stmt_close(stmt);
@@ -89,6 +99,10 @@ std::optional<Appointment> MySQLAppointmentRepository::findById(int64_t id) {
         a.status = dbToStatus(r_status);
         a.priority = dbToPriority(r_priority);
         a.queue_number = r_queue_number;
+        a.registration_fee = r_registration_fee;
+        a.insurance_fee = r_insurance_fee;
+        a.self_fee = r_self_fee;
+        a.settled = (r_settled != 0);
         a.created_at = std::string(r_created_at, r_created_at_len);
         apt = a;
     }
@@ -101,6 +115,7 @@ std::vector<Appointment> MySQLAppointmentRepository::findAll() {
     auto conn = pool_->getConnection();
 
     const char* sql = "SELECT id, patient_id, doctor_id, status, priority, queue_number, "
+                      "registration_fee, insurance_fee, self_fee, settled, "
                       "DATE_FORMAT(created_at, '%Y-%m-%d %H:%i:%s') AS created_at "
                       "FROM appointments";
 
@@ -126,8 +141,9 @@ std::vector<Appointment> MySQLAppointmentRepository::findAll() {
 bool MySQLAppointmentRepository::save(Appointment& entity) {
     auto conn = pool_->getConnection();
 
-    const char* sql = "INSERT INTO appointments (patient_id, doctor_id, status, priority, queue_number) "
-                      "VALUES (?, ?, ?, ?, ?)";
+    const char* sql = "INSERT INTO appointments (patient_id, doctor_id, status, priority, queue_number, "
+                      "registration_fee, insurance_fee, self_fee, settled) "
+                      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
     auto stmt = mysql_stmt_init(conn.get());
     if (!stmt) {
@@ -142,10 +158,14 @@ bool MySQLAppointmentRepository::save(Appointment& entity) {
     const char* status_str = statusToDb(entity.status);
     const char* priority_str = priorityToDb(entity.priority);
 
-    MYSQL_BIND bind[5] = {};
+    MYSQL_BIND bind[9] = {};
     long long patient_id = entity.patient_id;
     long long doctor_id = entity.doctor_id;
     int queue_number = entity.queue_number;
+    double registration_fee = entity.registration_fee;
+    double insurance_fee = entity.insurance_fee;
+    double self_fee = entity.self_fee;
+    int settled = entity.settled ? 1 : 0;
 
     bind[0].buffer_type = MYSQL_TYPE_LONGLONG;
     bind[0].buffer = &patient_id;
@@ -159,6 +179,14 @@ bool MySQLAppointmentRepository::save(Appointment& entity) {
     bind[3].buffer_length = strlen(priority_str);
     bind[4].buffer_type = MYSQL_TYPE_LONG;
     bind[4].buffer = &queue_number;
+    bind[5].buffer_type = MYSQL_TYPE_DOUBLE;
+    bind[5].buffer = &registration_fee;
+    bind[6].buffer_type = MYSQL_TYPE_DOUBLE;
+    bind[6].buffer = &insurance_fee;
+    bind[7].buffer_type = MYSQL_TYPE_DOUBLE;
+    bind[7].buffer = &self_fee;
+    bind[8].buffer_type = MYSQL_TYPE_LONG;
+    bind[8].buffer = &settled;
 
     if (mysql_stmt_bind_param(stmt, bind) != 0) {
         mysql_stmt_close(stmt);
@@ -179,7 +207,8 @@ bool MySQLAppointmentRepository::update(const Appointment& entity) {
     auto conn = pool_->getConnection();
 
     const char* sql = "UPDATE appointments SET "
-                      "patient_id = ?, doctor_id = ?, status = ?, priority = ?, queue_number = ? "
+                      "patient_id = ?, doctor_id = ?, status = ?, priority = ?, queue_number = ?, "
+                      "registration_fee = ?, insurance_fee = ?, self_fee = ?, settled = ? "
                       "WHERE id = ?";
 
     auto stmt = mysql_stmt_init(conn.get());
@@ -195,10 +224,14 @@ bool MySQLAppointmentRepository::update(const Appointment& entity) {
     const char* status_str = statusToDb(entity.status);
     const char* priority_str = priorityToDb(entity.priority);
 
-    MYSQL_BIND bind[6] = {};
+    MYSQL_BIND bind[10] = {};
     long long patient_id = entity.patient_id;
     long long doctor_id = entity.doctor_id;
     int queue_number = entity.queue_number;
+    double registration_fee = entity.registration_fee;
+    double insurance_fee = entity.insurance_fee;
+    double self_fee = entity.self_fee;
+    int settled = entity.settled ? 1 : 0;
     long long id = entity.id;
 
     bind[0].buffer_type = MYSQL_TYPE_LONGLONG;
@@ -213,8 +246,16 @@ bool MySQLAppointmentRepository::update(const Appointment& entity) {
     bind[3].buffer_length = strlen(priority_str);
     bind[4].buffer_type = MYSQL_TYPE_LONG;
     bind[4].buffer = &queue_number;
-    bind[5].buffer_type = MYSQL_TYPE_LONGLONG;
-    bind[5].buffer = &id;
+    bind[5].buffer_type = MYSQL_TYPE_DOUBLE;
+    bind[5].buffer = &registration_fee;
+    bind[6].buffer_type = MYSQL_TYPE_DOUBLE;
+    bind[6].buffer = &insurance_fee;
+    bind[7].buffer_type = MYSQL_TYPE_DOUBLE;
+    bind[7].buffer = &self_fee;
+    bind[8].buffer_type = MYSQL_TYPE_LONG;
+    bind[8].buffer = &settled;
+    bind[9].buffer_type = MYSQL_TYPE_LONGLONG;
+    bind[9].buffer = &id;
 
     if (mysql_stmt_bind_param(stmt, bind) != 0) {
         mysql_stmt_close(stmt);
@@ -270,6 +311,7 @@ std::vector<Appointment> MySQLAppointmentRepository::findByDoctor(int64_t doctor
     auto conn = pool_->getConnection();
 
     const char* sql = "SELECT id, patient_id, doctor_id, status, priority, queue_number, "
+                      "registration_fee, insurance_fee, self_fee, settled, "
                       "DATE_FORMAT(created_at, '%Y-%m-%d %H:%i:%s') AS created_at "
                       "FROM appointments WHERE doctor_id = ?";
 
@@ -299,10 +341,11 @@ std::vector<Appointment> MySQLAppointmentRepository::findByDoctor(int64_t doctor
     }
 
     // 绑定结果
-    MYSQL_BIND result_bind[7] = {};
+    MYSQL_BIND result_bind[11] = {};
     long long r_id, r_patient_id, r_doctor_id;
     char r_status[20], r_priority[20];
-    int r_queue_number;
+    int r_queue_number, r_settled;
+    double r_registration_fee, r_insurance_fee, r_self_fee;
     char r_created_at[30];
     unsigned long r_status_len, r_priority_len, r_created_at_len;
 
@@ -322,10 +365,18 @@ std::vector<Appointment> MySQLAppointmentRepository::findByDoctor(int64_t doctor
     result_bind[4].length = &r_priority_len;
     result_bind[5].buffer_type = MYSQL_TYPE_LONG;
     result_bind[5].buffer = &r_queue_number;
-    result_bind[6].buffer_type = MYSQL_TYPE_STRING;
-    result_bind[6].buffer = r_created_at;
-    result_bind[6].buffer_length = sizeof(r_created_at);
-    result_bind[6].length = &r_created_at_len;
+    result_bind[6].buffer_type = MYSQL_TYPE_DOUBLE;
+    result_bind[6].buffer = &r_registration_fee;
+    result_bind[7].buffer_type = MYSQL_TYPE_DOUBLE;
+    result_bind[7].buffer = &r_insurance_fee;
+    result_bind[8].buffer_type = MYSQL_TYPE_DOUBLE;
+    result_bind[8].buffer = &r_self_fee;
+    result_bind[9].buffer_type = MYSQL_TYPE_LONG;
+    result_bind[9].buffer = &r_settled;
+    result_bind[10].buffer_type = MYSQL_TYPE_STRING;
+    result_bind[10].buffer = r_created_at;
+    result_bind[10].buffer_length = sizeof(r_created_at);
+    result_bind[10].length = &r_created_at_len;
 
     if (mysql_stmt_bind_result(stmt, result_bind) != 0) {
         mysql_stmt_close(stmt);
@@ -346,6 +397,10 @@ std::vector<Appointment> MySQLAppointmentRepository::findByDoctor(int64_t doctor
         a.status = dbToStatus(r_status);
         a.priority = dbToPriority(r_priority);
         a.queue_number = r_queue_number;
+        a.registration_fee = r_registration_fee;
+        a.insurance_fee = r_insurance_fee;
+        a.self_fee = r_self_fee;
+        a.settled = (r_settled != 0);
         a.created_at = std::string(r_created_at, r_created_at_len);
         appointments.push_back(a);
     }
@@ -358,6 +413,7 @@ std::vector<Appointment> MySQLAppointmentRepository::findByPatient(int64_t patie
     auto conn = pool_->getConnection();
 
     const char* sql = "SELECT id, patient_id, doctor_id, status, priority, queue_number, "
+                      "registration_fee, insurance_fee, self_fee, settled, "
                       "DATE_FORMAT(created_at, '%Y-%m-%d %H:%i:%s') AS created_at "
                       "FROM appointments WHERE patient_id = ?";
 
@@ -387,10 +443,11 @@ std::vector<Appointment> MySQLAppointmentRepository::findByPatient(int64_t patie
     }
 
     // 绑定结果
-    MYSQL_BIND result_bind[7] = {};
+    MYSQL_BIND result_bind[11] = {};
     long long r_id, r_patient_id, r_doctor_id;
     char r_status[20], r_priority[20];
-    int r_queue_number;
+    int r_queue_number, r_settled;
+    double r_registration_fee, r_insurance_fee, r_self_fee;
     char r_created_at[30];
     unsigned long r_status_len, r_priority_len, r_created_at_len;
 
@@ -410,10 +467,18 @@ std::vector<Appointment> MySQLAppointmentRepository::findByPatient(int64_t patie
     result_bind[4].length = &r_priority_len;
     result_bind[5].buffer_type = MYSQL_TYPE_LONG;
     result_bind[5].buffer = &r_queue_number;
-    result_bind[6].buffer_type = MYSQL_TYPE_STRING;
-    result_bind[6].buffer = r_created_at;
-    result_bind[6].buffer_length = sizeof(r_created_at);
-    result_bind[6].length = &r_created_at_len;
+    result_bind[6].buffer_type = MYSQL_TYPE_DOUBLE;
+    result_bind[6].buffer = &r_registration_fee;
+    result_bind[7].buffer_type = MYSQL_TYPE_DOUBLE;
+    result_bind[7].buffer = &r_insurance_fee;
+    result_bind[8].buffer_type = MYSQL_TYPE_DOUBLE;
+    result_bind[8].buffer = &r_self_fee;
+    result_bind[9].buffer_type = MYSQL_TYPE_LONG;
+    result_bind[9].buffer = &r_settled;
+    result_bind[10].buffer_type = MYSQL_TYPE_STRING;
+    result_bind[10].buffer = r_created_at;
+    result_bind[10].buffer_length = sizeof(r_created_at);
+    result_bind[10].length = &r_created_at_len;
 
     if (mysql_stmt_bind_result(stmt, result_bind) != 0) {
         mysql_stmt_close(stmt);
@@ -434,6 +499,10 @@ std::vector<Appointment> MySQLAppointmentRepository::findByPatient(int64_t patie
         a.status = dbToStatus(r_status);
         a.priority = dbToPriority(r_priority);
         a.queue_number = r_queue_number;
+        a.registration_fee = r_registration_fee;
+        a.insurance_fee = r_insurance_fee;
+        a.self_fee = r_self_fee;
+        a.settled = (r_settled != 0);
         a.created_at = std::string(r_created_at, r_created_at_len);
         appointments.push_back(a);
     }
@@ -589,13 +658,17 @@ int MySQLAppointmentRepository::getNextQueueNumber(int64_t doctor_id) {
 
 Appointment MySQLAppointmentRepository::parseRow(MYSQL_ROW row) {
     Appointment a;
-    a.id           = row[0] ? std::stoll(row[0]) : 0;
-    a.patient_id   = row[1] ? std::stoll(row[1]) : 0;
-    a.doctor_id    = row[2] ? std::stoll(row[2]) : 0;
-    a.status       = row[3] ? dbToStatus(row[3]) : AppointmentStatus::Waiting;
-    a.priority     = row[4] ? dbToPriority(row[4]) : Priority::Normal;
-    a.queue_number = row[5] ? std::stoi(row[5]) : 0;
-    a.created_at   = row[6] ? row[6] : "";
+    a.id                = row[0] ? std::stoll(row[0]) : 0;
+    a.patient_id        = row[1] ? std::stoll(row[1]) : 0;
+    a.doctor_id         = row[2] ? std::stoll(row[2]) : 0;
+    a.status            = row[3] ? dbToStatus(row[3]) : AppointmentStatus::Waiting;
+    a.priority          = row[4] ? dbToPriority(row[4]) : Priority::Normal;
+    a.queue_number      = row[5] ? std::stoi(row[5]) : 0;
+    a.registration_fee  = row[6] ? std::stod(row[6]) : 0.0;
+    a.insurance_fee     = row[7] ? std::stod(row[7]) : 0.0;
+    a.self_fee          = row[8] ? std::stod(row[8]) : 0.0;
+    a.settled           = row[9] ? (std::stoi(row[9]) != 0) : false;
+    a.created_at        = row[10] ? row[10] : "";
     return a;
 }
 

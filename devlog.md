@@ -1,5 +1,65 @@
 # 开发日志
 
+## 2026-06-17 18:00 - 课程设计要求完善
+
+根据课程设计要求完善系统功能。
+
+### 完成内容
+
+**1. 补充测试数据**
+- 5 个科室：内科、外科、妇产科、儿科、急诊科
+- 20 位医生：每科室 4 位，不同职称（主任医师、副主任医师、主治医师、住院医师）
+- 100 位患者：真实中文姓名、手机号、身份证号、医保类型
+
+**2. 实现医保结算功能**
+- 扩展 Patient 模型，添加 `insurance_type` 字段（医保类型）
+- 扩展 Appointment 模型，添加 `registration_fee`、`insurance_fee`、`self_fee`、`settled` 字段
+- 新增 `IInsuranceService` 接口和 `InsuranceService` 实现
+- 挂号费：普通 10 元，加急 20 元，急诊 50 元
+- 医保报销：职工 80%，居民/新农合 60%，自费 0%
+- 新增 `POST /api/appointments/:id/settle` 结算接口
+- 更新数据库 schema 添加医保相关字段
+
+**3. 补充经典算法**
+- 新增 `BinarySearch` 类：二分查找、lower_bound、自定义比较查找
+- 新增 `QuickSort` 类：快速排序、三数取中法优化、自定义比较排序
+- 系统算法总计：优先队列（堆排序）、贪心算法、二分查找、快速排序
+
+**4. 创建使用说明文件**
+- 新增 `USAGE.md`，包含：
+  - 学号、姓名（首行）
+  - 系统简介
+  - 环境要求
+  - 安装步骤
+  - 使用说明（患者挂号、医生叫号、大屏显示、医保结算）
+  - API 文档
+  - 常见问题
+  - 项目结构
+  - 算法说明
+
+**5. 代码注释检查**
+- 所有头文件均有类和方法注释
+- 关键算法有详细注释
+- 数据模型有字段说明
+
+### 修改的文件
+- `sql/schema.sql` — 添加医保字段、测试数据
+- `include/model/Patient.h` — 添加 InsuranceType 枚举和 insurance_type 字段
+- `include/model/Appointment.h` — 添加医保结算字段
+- `include/service/IInsuranceService.h` — 新增医保结算接口
+- `src/service/InsuranceService.h/.cpp` — 实现医保结算服务
+- `src/api/ApiController.h/.cpp` — 添加结算接口
+- `src/main.cpp` — 注册 InsuranceService
+- `CMakeLists.txt` — 添加 InsuranceService.cpp
+- `include/algorithm/BinarySearch.h` — 新增二分查找算法
+- `include/algorithm/QuickSort.h` — 新增快速排序算法
+- `USAGE.md` — 新增使用说明
+
+### 验证结果
+- 编译通过，0 error / 0 warning
+
+---
+
 ## 2026-06-17 17:30 - P4: 工程与运维
 
 完成 P4 阶段主要工程化任务。

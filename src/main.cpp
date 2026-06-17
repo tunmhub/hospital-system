@@ -26,6 +26,7 @@
 
 // Service 实现
 #include "service/AppointmentService.h"
+#include "service/InsuranceService.h"
 
 // API 控制器
 #include "api/ApiController.h"
@@ -61,6 +62,14 @@ void registerDependencies(Container& container, std::shared_ptr<MySQLConnectionP
         auto appointmentRepo = container.resolve<IAppointmentRepository>();
         return std::make_shared<AppointmentService>(
             patientRepo, doctorRepo, appointmentRepo);
+    });
+
+    // 医保结算服务
+    container.bindFactory<IInsuranceService>([&container]() {
+        auto patientRepo     = container.resolve<IPatientRepository>();
+        auto appointmentRepo = container.resolve<IAppointmentRepository>();
+        return std::make_shared<InsuranceService>(
+            patientRepo, appointmentRepo);
     });
 }
 
@@ -108,12 +117,13 @@ int main() {
         auto doctorRepo      = container.resolve<IDoctorRepository>();
         auto appointmentRepo = container.resolve<IAppointmentRepository>();
         auto appointmentSvc  = container.resolve<IAppointmentService>();
+        auto insuranceSvc    = container.resolve<IInsuranceService>();
 
         std::cout << "[INFO] 所有依赖解析成功" << std::endl;
 
         // ---- 初始化 API 控制器 ----
         ApiController apiController(
-            patientRepo, doctorRepo, appointmentRepo, appointmentSvc);
+            patientRepo, doctorRepo, appointmentRepo, appointmentSvc, insuranceSvc);
 
         // ---- 启动 HTTP 服务器 ----
         httplib::Server server;

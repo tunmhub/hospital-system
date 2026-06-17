@@ -48,6 +48,10 @@ struct Appointment {
     AppointmentStatus status = AppointmentStatus::Waiting;
     Priority priority = Priority::Normal;
     int queue_number = 0;          ///< 排队号码
+    double registration_fee = 0.0; ///< 挂号费
+    double insurance_fee = 0.0;    ///< 医保报销金额
+    double self_fee = 0.0;         ///< 自费金额
+    bool settled = false;          ///< 是否已结算
     std::string created_at;        ///< 挂号时间
 };
 

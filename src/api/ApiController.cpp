@@ -28,11 +28,13 @@ ApiController::ApiController(
     std::shared_ptr<IPatientRepository> patientRepo,
     std::shared_ptr<IDoctorRepository> doctorRepo,
     std::shared_ptr<IAppointmentRepository> appointmentRepo,
-    std::shared_ptr<IAppointmentService> appointmentService)
+    std::shared_ptr<IAppointmentService> appointmentService,
+    std::shared_ptr<IInsuranceService> insuranceService)
     : patientRepo_(std::move(patientRepo))
     , doctorRepo_(std::move(doctorRepo))
     , appointmentRepo_(std::move(appointmentRepo))
-    , appointmentService_(std::move(appointmentService)) {}
+    , appointmentService_(std::move(appointmentService))
+    , insuranceService_(std::move(insuranceService)) {}
 
 void ApiController::registerRoutes(httplib::Server& server) {
     // ---- 患者 ----
@@ -104,9 +106,15 @@ void ApiController::registerRoutes(httplib::Server& server) {
             handleEstimateWaitTime(req, res);
         });
 
+    // ---- 结算 ----
+    server.Post(R"(/api/appointments/(\d+)/settle)",
+        [this](const httplib::Request& req, httplib::Response& res) {
+            handleSettleAppointment(req, res);
+        });
+
     std::cout << "[API] 路由注册完成:" << std::endl;
     std::cout << "[API]   POST /api/patients              - 注册患者" << std::endl;
-    std::cout << "[API]   GET  /api/patients               - 患者列表" << std::endl;
+    std::cout << "[API]   GET  /api/patients               - 患者列表/搜索" << std::endl;
     std::cout << "[API]   GET  /api/patients/:id           - 查询患者" << std::endl;
     std::cout << "[API]   GET  /api/patients/:id/appointments - 患者挂号记录" << std::endl;
     std::cout << "[API]   GET  /api/doctors                - 医生列表" << std::endl;
@@ -114,6 +122,7 @@ void ApiController::registerRoutes(httplib::Server& server) {
     std::cout << "[API]   POST /api/appointments           - 发起挂号" << std::endl;
     std::cout << "[API]   POST /api/appointments/:id/cancel - 取消挂号" << std::endl;
     std::cout << "[API]   POST /api/appointments/:id/complete - 完成就诊" << std::endl;
+    std::cout << "[API]   POST /api/appointments/:id/settle - 医保结算" << std::endl;
     std::cout << "[API]   POST /api/appointments/auto      - 自动分流挂号" << std::endl;
     std::cout << "[API]   POST /api/doctors/:id/call_next  - 呼叫下一位" << std::endl;
     std::cout << "[API]   GET  /api/appointments/:id/wait_time - 预估等待时间" << std::endl;
@@ -565,6 +574,52 @@ void ApiController::handleEstimateWaitTime(const httplib::Request& req, httplib:
         json resp = {
             {"appointment_id", *appointmentIdOpt},
             {"wait_minutes",   result.value()}
+        };
+        setJsonResponse(res, 200, resp.dump());
+
+    } catch (const std::exception& e) {
+        setErrorResponse(res, 400, e.what());
+    }
+}
+
+// ============================================================
+// 结算接口
+// ============================================================
+
+void ApiController::handleSettleAppointment(const httplib::Request& req, httplib::Response& res) {
+    try {
+        if (!insuranceService_) {
+            setErrorResponse(res, 500, "医保结算服务未配置");
+            return;
+        }
+
+        auto appointmentIdOpt = parseId(req.matches[1]);
+        if (!appointmentIdOpt) {
+            setErrorResponse(res, 400, "无效的挂号 ID");
+            return;
+        }
+
+        auto result = insuranceService_->settleAppointment(*appointmentIdOpt);
+
+        if (!result.ok()) {
+            setErrorResponse(res, 400, result.errorMessage());
+            return;
+        }
+
+        const auto& apt = result.value();
+
+        // 获取患者信息
+        auto patient = patientRepo_->findById(apt.patient_id);
+
+        json resp = {
+            {"id",               apt.id},
+            {"patient_id",       apt.patient_id},
+            {"patient_name",     patient ? patient->name : ""},
+            {"insurance_type",   patient ? insuranceTypeToString(patient->insurance_type) : "self"},
+            {"registration_fee", apt.registration_fee},
+            {"insurance_fee",    apt.insurance_fee},
+            {"self_fee",         apt.self_fee},
+            {"settled",          apt.settled}
         };
         setJsonResponse(res, 200, resp.dump());
 
