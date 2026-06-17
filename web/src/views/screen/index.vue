@@ -57,7 +57,7 @@
                 
                 <div class="d-flex align-items-center mt-auto">
                   <i class="bi bi-hourglass-split me-2 opacity-75"></i>
-                  <span class="opacity-75 fs-5">预计等待: <strong>{{ (index + 1) * 10 }} 分钟</strong></span>
+                  <span class="opacity-75 fs-5">预计等待: <strong>{{ item.wait_minutes !== null ? item.wait_minutes + ' 分钟' : '计算中...' }}</strong></span>
                 </div>
               </div>
             </div>
@@ -90,10 +90,10 @@ const refreshQueue = async () => {
   }
   try {
     const allQueue: any[] = await request.get(`/api/doctors/${selectedDoctor.value}/queue`)
-    
-    // 只过滤出目前状态在等待的（忽略掉已经完成，或者已经叫号正在就诊的，就诊状态需要看你们后端的具体枚举定义，此处按 waiting 举例）
-    const waiting = allQueue.filter(item => item.status === 'waiting' || item.status === 0 || item.status === 'WAITING')
-    
+
+    // 只过滤出目前状态在等待的
+    const waiting = allQueue.filter(item => item.status === 'waiting')
+
     // 强制排序：急诊(0) > 加急(1) > 普通(2)
     const priorityOrder: Record<string, number> = { 'emergency': 0, 'urgent': 1, 'normal': 2 }
     waiting.sort((a, b) => {
@@ -102,7 +102,17 @@ const refreshQueue = async () => {
       if (pA !== pB) return pA - pB
       return parseInt(a.queue_number) - parseInt(b.queue_number)
     })
-    
+
+    // 调用后端 wait_time 接口获取等待时间
+    for (const item of waiting) {
+      try {
+        const waitData: any = await request.get(`/api/appointments/${item.id}/wait_time`)
+        item.wait_minutes = waitData.wait_minutes
+      } catch (e) {
+        item.wait_minutes = null
+      }
+    }
+
     queue.value = waiting
   } catch (e) {}
 }

@@ -57,8 +57,10 @@
                   <span class="badge bg-secondary ms-1 fs-6 fw-normal">{{ doc.title || '医师' }}</span>
                 </div>
                 <div class="text-muted small">
-                  {{ doc.department }} 
-                  <span class="ms-2">|</span> 
+                  {{ doc.department }}
+                  <span class="ms-2">|</span>
+                  等待: <span class="text-primary fw-bold">{{ waitingCounts[doc.id] || 0 }}</span>
+                  <span class="ms-2">|</span>
                   负载: <span :class="(doc.current_patients >= doc.max_patients) ? 'text-danger fw-bold' : 'text-primary'">{{ doc.current_patients }}/{{ doc.max_patients }}</span>
                 </div>
               </div>
@@ -82,18 +84,34 @@ import request from '@/utils/request'
 import Swal from 'sweetalert2'
 
 const doctors = ref<any[]>([])
+const waitingCounts = ref<Record<number, number>>({})
 let timer: any = null
 
 const totalWaiting = computed(() => {
-  return doctors.value.reduce((sum, doc) => sum + doc.current_patients, 0)
+  return Object.values(waitingCounts.value).reduce((sum, count) => sum + count, 0)
 })
 
 const loadDoctors = async () => {
   try {
     doctors.value = await request.get('/api/doctors')
+    // 加载每个医生的真正等待人数
+    await loadWaitingCounts()
   } catch (e) {
     // 已经被 request.ts 中的阻断拦截报出
   }
+}
+
+const loadWaitingCounts = async () => {
+  const counts: Record<number, number> = {}
+  for (const doc of doctors.value) {
+    try {
+      const queue: any[] = await request.get(`/api/doctors/${doc.id}/queue`)
+      counts[doc.id] = queue.filter(item => item.status === 'waiting').length
+    } catch (e) {
+      counts[doc.id] = 0
+    }
+  }
+  waitingCounts.value = counts
 }
 
 const callNext = async (doc: any) => {

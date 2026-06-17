@@ -1,5 +1,30 @@
 # 开发日志
 
+## 2026-06-17 16:30 - P2: 业务与状态机完善
+
+完成 P2 阶段所有业务与状态机完善任务。
+
+### 修复内容
+
+**11. 引入 InProgress 状态**
+- 已在 P0 阶段完成：callNextPatient 设置 InProgress，completeAppointment 和 cancelAppointment 已实现
+
+**12. 明确 current_patients 语义**
+- `doctor/index.vue` 新增 `waitingCounts` 状态，从队列接口统计真正的 waiting 人数
+- `totalWaiting` 改为从 `waitingCounts` 计算总和
+- 医生卡片显示"等待: X"和"负载: X/Y"两个指标
+
+**13. 大屏统一调用 wait_time 接口**
+- `screen/index.vue` 在 `refreshQueue()` 中遍历等待队列，调用 `/api/appointments/${item.id}/wait_time`
+- 模板使用 `item.wait_minutes` 显示后端返回的等待时间
+- 接口失败时显示"计算中..."
+
+### 修改的文件
+- `web/src/views/doctor/index.vue` — 等待人数统计改为从队列接口获取
+- `web/src/views/screen/index.vue` — 等待时间改为调用后端接口
+
+---
+
 ## 2026-06-17 16:00 - P1: 稳定性与并发修复
 
 完成 P1 阶段所有 5 项稳定性与并发修复任务。

@@ -243,27 +243,37 @@ std::lock_guard<std::mutex> lock(serviceMutex_);
 
 ---
 
-## 第三阶段：P2 业务与状态机完善
+## 第三阶段：P2 业务与状态机完善 ✅ 已完成
 
-### 11. 引入 `InProgress` 状态
+> **完成时间**：2026-06-17
+> **验证状态**：前端修改完成
+
+### 11. 引入 `InProgress` 状态 ✅
 
 - `callNextPatient()` 状态改为 `InProgress`。
 - 新增 `POST /api/appointments/:id/complete` 完成就诊。
 - 新增 `POST /api/appointments/:id/cancel` 取消。
 - `doctor.current_patients` 只在真正完成或取消时变化。
 
+**状态**：已在 P0 阶段完成（callNextPatient、completeAppointment、cancelAppointment 均已实现）
+
 ---
 
-### 12. 明确 `current_patients` 语义
+### 12. 明确 `current_patients` 语义 ✅
 
 **方案 A**：改名为 `current_load`（当前未完成挂号数）。
 **方案 B**：拆成 `waiting_count` 和 `completed_count`。
 
 同步修改前端 `doctor/index.vue` 的 `totalWaiting` 为真正的等待人数统计（后端提供接口或前端从队列长度计算）。
 
+**实现**：
+- `doctor/index.vue` 新增 `waitingCounts` 状态，从队列接口统计真正的 waiting 人数
+- `totalWaiting` 改为从 `waitingCounts` 计算总和
+- 医生卡片显示"等待: X"和"负载: X/Y"两个指标
+
 ---
 
-### 13. 大屏统一调用 `wait_time` 接口
+### 13. 大屏统一调用 `wait_time` 接口 ✅
 
 修改 `screen/index.vue`，移除本地计算，改为调用：
 
@@ -271,6 +281,11 @@ std::lock_guard<std::mutex> lock(serviceMutex_);
 const { data } = await api.get(`/appointments/${item.id}/wait_time`)
 item.wait_minutes = data.wait_minutes
 ```
+
+**实现**：
+- `screen/index.vue` 在 `refreshQueue()` 中遍历等待队列，调用 `/api/appointments/${item.id}/wait_time` 获取等待时间
+- 模板使用 `item.wait_minutes` 显示后端返回的等待时间
+- 接口失败时显示"计算中..."
 
 ---
 
