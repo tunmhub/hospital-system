@@ -126,6 +126,31 @@ int main() {
             res.set_content(R"({"status":"ok","service":"hospital_system"})", "application/json");
         });
 
+        // 统一异常处理中间件
+        server.set_exception_handler([](const httplib::Request& /*req*/, httplib::Response& res, std::exception_ptr ep) {
+            try {
+                if (ep) std::rethrow_exception(ep);
+            } catch (const ValidationException& e) {
+                res.status = 400;
+                res.set_content(R"({"error":")" + std::string(e.what()) + R"("})", "application/json");
+            } catch (const NotFoundException& e) {
+                res.status = 404;
+                res.set_content(R"({"error":")" + std::string(e.what()) + R"("})", "application/json");
+            } catch (const DatabaseException& e) {
+                std::cerr << "[DB ERROR] " << e.what() << std::endl;
+                res.status = 500;
+                res.set_content(R"({"error":"数据库错误"})", "application/json");
+            } catch (const std::exception& e) {
+                std::cerr << "[ERROR] " << e.what() << std::endl;
+                res.status = 500;
+                res.set_content(R"({"error":"服务器内部错误"})", "application/json");
+            } catch (...) {
+                std::cerr << "[ERROR] 未知异常" << std::endl;
+                res.status = 500;
+                res.set_content(R"({"error":"服务器内部错误"})", "application/json");
+            }
+        });
+
         // 托管前端静态文件
         if (server.set_mount_point("/", "./public")) {
             std::cout << "[INFO] 静态文件托管: ./public/" << std::endl;

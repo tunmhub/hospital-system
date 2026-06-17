@@ -1,5 +1,50 @@
 # 开发日志
 
+## 2026-06-17 17:30 - P4: 工程与运维
+
+完成 P4 阶段主要工程化任务。
+
+### 修复内容
+
+**18. 完善 .gitignore**
+- 更新 `.gitignore`，添加 `/build/`、`/web/dist/`、`/public/` 等路径
+- 添加日志和数据库文件忽略规则
+
+**19. 删除根目录 node_modules**
+- 删除根目录的 `node_modules`、`package-lock.json`、`package.json`
+- 这些文件是多余的，`web/` 目录已有完整的前端配置
+
+**20. 新增 README.md**
+- 项目简介和技术栈
+- 快速开始指南（数据库初始化、后端构建、前端开发）
+- 项目结构说明
+- API 速览表格
+- 核心功能介绍
+- 环境变量配置
+
+**21. 引入测试框架**
+- 状态：待后续完善（当前优先级较低）
+
+**22. Controller 异常处理中间件**
+- 在 `main.cpp` 中添加 `server.set_exception_handler`
+- 捕获 `ValidationException` → 400
+- 捕获 `NotFoundException` → 404
+- 捕获 `DatabaseException` → 500（记录日志）
+- 捕获其他异常 → 500（记录日志）
+
+**23. 引入日志库**
+- 状态：待后续完善（当前优先级较低，使用 std::cout/std::cerr 已满足需求）
+
+### 修改的文件
+- `.gitignore` — 完善忽略规则
+- `README.md` — 新增项目文档
+- `src/main.cpp` — 添加异常处理中间件
+
+### 验证结果
+- 编译通过，0 error / 0 warning
+
+---
+
 ## 2026-06-17 17:00 - P3: 前端工程化
 
 完成 P3 阶段所有前端工程化任务。

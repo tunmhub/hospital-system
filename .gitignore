@@ -1,10 +1,10 @@
 # Build directories
-build/
-cmake-build-*/
+/build/
+/cmake-build-*/
 
 # IDE files
-.vscode/
 .idea/
+.vscode/
 *.swp
 *.swo
 *~
@@ -24,16 +24,29 @@ cmake_install.cmake
 Makefile
 compile_commands.json
 
-# macOS
+# OS
 .DS_Store
+Thumbs.db
 
 # Dependencies
-node_modules/
-web/node_modules/
+/node_modules/
+/package-lock.json
+/package.json
+/web/node_modules/
+/web/dist/
 _deps/
 
 # Build outputs
-public/assets/
+/public/assets/
+/public/index.html
 
 # Binary
 hospital_system
+
+# Logs
+*.log
+logs/
+
+# Database
+*.db
+*.sqlite

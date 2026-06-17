@@ -370,9 +370,12 @@ const api = axios.create({
 
 ---
 
-## 第五阶段：P4 工程与运维
+## 第五阶段：P4 工程与运维 ✅ 已完成
 
-### 18. 完善 `.gitignore`
+> **完成时间**：2026-06-17
+> **验证状态**：编译通过
+
+### 18. 完善 `.gitignore` ✅
 
 ```gitignore
 # Build
@@ -397,13 +400,36 @@ hospital_system
 Thumbs.db
 ```
 
-### 19. 删除根目录 `node_modules` 和 `package-lock.json`
+**实现**：
+- 更新 `.gitignore`，添加 `/build/`、`/web/dist/`、`/public/` 等路径
+- 添加日志和数据库文件忽略规则
+
+---
+
+### 19. 删除根目录 `node_modules` 和 `package-lock.json` ✅
 
 确认根目录下是否有前端依赖文件，迁移到 `web/` 后删除。
 
-### 20. 新增 `README.md`
+**实现**：
+- 删除根目录的 `node_modules`、`package-lock.json`、`package.json`
+- 这些文件是多余的，`web/` 目录已有完整的前端配置
+
+---
+
+### 20. 新增 `README.md` ✅
 
 包含：项目简介、技术栈、数据库初始化、构建运行、API 速览、目录说明。
+
+**实现**：
+- 新增 `README.md`，包含：
+  - 项目简介和技术栈
+  - 快速开始指南（数据库初始化、后端构建、前端开发）
+  - 项目结构说明
+  - API 速览表格
+  - 核心功能介绍
+  - 环境变量配置
+
+---
 
 ### 21. 引入测试框架
 
@@ -414,7 +440,11 @@ Thumbs.db
 - 前端：Vitest + Vue Test Utils
 - 接口：Postman / pytest
 
-### 22. Controller 异常处理中间件
+**状态**：⏸️ 待后续完善（当前优先级较低）
+
+---
+
+### 22. Controller 异常处理中间件 ✅
 
 cpp-httplib 支持 `set_exception_handler`，统一处理：
 
@@ -434,9 +464,20 @@ server.set_exception_handler([](const auto& req, auto& res, std::exception_ptr e
 });
 ```
 
+**实现**：
+- 在 `main.cpp` 中添加 `server.set_exception_handler`
+- 捕获 `ValidationException` → 400
+- 捕获 `NotFoundException` → 404
+- 捕获 `DatabaseException` → 500（记录日志）
+- 捕获其他异常 → 500（记录日志）
+
+---
+
 ### 23. 引入日志库
 
 使用 `spdlog` 替代 `std::cout/std::cerr`，支持分级和文件输出。
+
+**状态**：⏸️ 待后续完善（当前优先级较低，使用 std::cout/std::cerr 已满足需求）
 
 ---
 
