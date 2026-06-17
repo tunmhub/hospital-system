@@ -73,6 +73,11 @@ void ApiController::registerRoutes(httplib::Server& server) {
             handleCallNextPatient(req, res);
         });
 
+    server.Post(R"(/api/appointments/(\d+)/complete)",
+        [this](const httplib::Request& req, httplib::Response& res) {
+            handleCompleteAppointment(req, res);
+        });
+
     server.Get(R"(/api/appointments/(\d+)/wait_time)",
         [this](const httplib::Request& req, httplib::Response& res) {
             handleEstimateWaitTime(req, res);
@@ -87,6 +92,7 @@ void ApiController::registerRoutes(httplib::Server& server) {
     std::cout << "[API]   GET  /api/doctors/:id/queue      - 医生排队队列" << std::endl;
     std::cout << "[API]   POST /api/appointments           - 发起挂号" << std::endl;
     std::cout << "[API]   POST /api/appointments/:id/cancel - 取消挂号" << std::endl;
+    std::cout << "[API]   POST /api/appointments/:id/complete - 完成就诊" << std::endl;
     std::cout << "[API]   POST /api/appointments/auto      - 自动分流挂号" << std::endl;
     std::cout << "[API]   POST /api/doctors/:id/call_next  - 呼叫下一位" << std::endl;
     std::cout << "[API]   GET  /api/appointments/:id/wait_time - 预估等待时间" << std::endl;
@@ -250,12 +256,24 @@ void ApiController::handleGetDoctorQueue(const httplib::Request& req, httplib::R
             return;
         }
 
+        // 获取医生信息
+        auto doctor = doctorRepo_->findById(doctorId);
+        std::string doctorName = doctor ? doctor->name : "";
+        std::string department = doctor ? doctor->department : "";
+
         json arr = json::array();
         for (const auto& apt : result.value()) {
+            // 获取患者信息
+            auto patient = patientRepo_->findById(apt.patient_id);
+            std::string patientName = patient ? patient->name : "";
+
             arr.push_back({
                 {"id",           apt.id},
                 {"patient_id",   apt.patient_id},
+                {"patient_name", patientName},
                 {"doctor_id",    apt.doctor_id},
+                {"doctor_name",  doctorName},
+                {"department",   department},
                 {"status",       statusToString(apt.status)},
                 {"priority",     priorityToString(apt.priority)},
                 {"queue_number", apt.queue_number},
@@ -301,10 +319,18 @@ void ApiController::handleMakeAppointment(const httplib::Request& req, httplib::
         }
 
         const auto& apt = result.value();
+
+        // 获取患者和医生信息
+        auto patient = patientRepo_->findById(apt.patient_id);
+        auto doctor = doctorRepo_->findById(apt.doctor_id);
+
         json resp = {
             {"id",           apt.id},
             {"patient_id",   apt.patient_id},
+            {"patient_name", patient ? patient->name : ""},
             {"doctor_id",    apt.doctor_id},
+            {"doctor_name",  doctor ? doctor->name : ""},
+            {"department",   doctor ? doctor->department : ""},
             {"status",       statusToString(apt.status)},
             {"priority",     priorityToString(apt.priority)},
             {"queue_number", apt.queue_number},
@@ -370,10 +396,18 @@ void ApiController::handleAutoRouteAppointment(const httplib::Request& req, http
         }
 
         const auto& apt = result.value();
+
+        // 获取患者和医生信息
+        auto patient = patientRepo_->findById(apt.patient_id);
+        auto doctor = doctorRepo_->findById(apt.doctor_id);
+
         json resp = {
             {"id",           apt.id},
             {"patient_id",   apt.patient_id},
+            {"patient_name", patient ? patient->name : ""},
             {"doctor_id",    apt.doctor_id},
+            {"doctor_name",  doctor ? doctor->name : ""},
+            {"department",   doctor ? doctor->department : ""},
             {"status",       statusToString(apt.status)},
             {"priority",     priorityToString(apt.priority)},
             {"queue_number", apt.queue_number},
@@ -399,15 +433,41 @@ void ApiController::handleCallNextPatient(const httplib::Request& req, httplib::
         }
 
         const auto& apt = result.value();
+
+        // 获取患者和医生信息
+        auto patient = patientRepo_->findById(apt.patient_id);
+        auto doctor = doctorRepo_->findById(apt.doctor_id);
+
         json resp = {
             {"id",           apt.id},
             {"patient_id",   apt.patient_id},
+            {"patient_name", patient ? patient->name : ""},
             {"doctor_id",    apt.doctor_id},
+            {"doctor_name",  doctor ? doctor->name : ""},
+            {"department",   doctor ? doctor->department : ""},
             {"status",       statusToString(apt.status)},
             {"priority",     priorityToString(apt.priority)},
             {"queue_number", apt.queue_number},
             {"created_at",   apt.created_at}
         };
+        setJsonResponse(res, 200, resp.dump());
+
+    } catch (const std::exception& e) {
+        setErrorResponse(res, 400, e.what());
+    }
+}
+
+void ApiController::handleCompleteAppointment(const httplib::Request& req, httplib::Response& res) {
+    try {
+        int64_t appointmentId = std::stoll(req.matches[1]);
+        auto result = appointmentService_->completeAppointment(appointmentId);
+
+        if (!result.ok()) {
+            setErrorResponse(res, 400, result.errorMessage());
+            return;
+        }
+
+        json resp = {{"message", "就诊已完成"}};
         setJsonResponse(res, 200, resp.dump());
 
     } catch (const std::exception& e) {

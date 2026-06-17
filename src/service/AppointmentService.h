@@ -49,6 +49,8 @@ public:
 
     Result<Appointment> callNextPatient(int64_t doctor_id) override;
 
+    Result<void> completeAppointment(int64_t appointment_id);
+
     Result<int> estimateWaitTime(int64_t appointment_id) override;
 
 private:
@@ -56,17 +58,10 @@ private:
     Result<Appointment> makeAppointmentInternal(
         int64_t patient_id, int64_t doctor_id, Priority priority);
 
-    /// 获取或创建指定医生的优先队列
-    PriorityQueueStrategy& getOrCreateQueue(int64_t doctor_id);
-
     std::shared_ptr<IPatientRepository> patientRepo_;
     std::shared_ptr<IDoctorRepository> doctorRepo_;
     std::shared_ptr<IAppointmentRepository> appointmentRepo_;
     std::mutex serviceMutex_;
-
-    /// 每个医生对应一个内存优先队列（用于叫号）
-    std::unordered_map<int64_t, std::unique_ptr<PriorityQueueStrategy>> doctorQueues_;
-    std::mutex queueMapMutex_;
 };
 
 } // namespace hospital

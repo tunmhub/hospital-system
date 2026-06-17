@@ -286,3 +286,58 @@
 **工程化成就：**
 - 初始化完整的 npm package：Axios (统一网络/异常拦截), Vue Router (单页多端路由), Sass (独立层叠样式), 等等。
 - Vite 配置 `outDir: '../public'`，一次执行 `npm run build` 即可完成部署并交给后端的 `cpp-httplib` 托管。彻底进入前后端工程平行分离的标准工业模式。
+
+---
+
+## 2026-06-17 - P0 核心功能修复
+
+完成 REPAIR_PLAN.md 中 P0 阶段的所有修复任务。
+
+### 修复内容
+
+**1. SQL 注入修复** ✅
+- 文件：`src/repository/mysql/MySQLAppointmentRepository.cpp`
+- 将所有字符串拼接改为 MySQL 预处理语句（`mysql_stmt_prepare` / `mysql_stmt_bind_param`）
+- 涉及方法：`findById`、`save`、`update`、`remove`、`findByDoctor`、`findByPatient`、`countWaitingByDoctor`
+
+**2. 叫号逻辑重构** ✅
+- 文件：`src/service/AppointmentService.cpp`
+- 删除 `doctorQueues_` 内存队列和 `getOrCreateQueue()` 方法
+- `callNextPatient()` 改为每次从数据库查询等待中的挂号
+
+**3. 状态机完善** ✅
+- `callNextPatient()` 状态改为 `InProgress`（原来是 `Completed`）
+- 新增 `completeAppointment()` 方法，将 `InProgress` 状态改为 `Completed`
+- 新增 `POST /api/appointments/:id/complete` 接口
+
+**4. cancelAppointment 校验** ✅
+- 在 `cancelAppointment()` 中添加 Completed 状态检查
+- 已完成的挂号无法取消
+
+**5. API 字段组装** ✅
+- 在 `ApiController` 中查询患者/医生信息并组装返回
+- 涉及接口：`handleGetDoctorQueue`、`handleMakeAppointment`、`handleAutoRouteAppointment`、`handleCallNextPatient`
+- 返回字段包含：`patient_name`、`doctor_name`、`department`
+
+### 修改的文件
+- `src/repository/mysql/MySQLAppointmentRepository.cpp` - SQL 注入修复
+- `src/repository/mysql/MySQLAppointmentRepository.h` - 无需修改
+- `src/service/AppointmentService.cpp` - 叫号逻辑重构 + InProgress 状态
+- `src/service/AppointmentService.h` - 新增 completeAppointment 方法
+- `include/service/IAppointmentService.h` - 新增 completeAppointment 接口
+- `src/api/ApiController.cpp` - 新增 complete 接口 + 字段组装
+- `src/api/ApiController.h` - 新增 handleCompleteAppointment 方法
+
+### 验证结果
+- 编译通过：`make` 成功
+- API 测试：
+  - 创建患者：`POST /api/patients` ✅
+  - 挂号：`POST /api/appointments` 返回 `patient_name`、`doctor_name`、`department` ✅
+  - 叫号：`POST /api/doctors/:id/call_next` 状态变为 `in_progress` ✅
+  - 完成就诊：`POST /api/appointments/:id/complete` 成功 ✅
+
+### 状态流转
+```
+Waiting → InProgress → Completed
+                  ↘ Cancelled
+```

@@ -2,7 +2,6 @@
 #include "common/Exception.h"
 
 #include <sstream>
-#include <queue>
 #include <vector>
 
 namespace hospital {
@@ -88,6 +87,10 @@ Result<void> AppointmentService::cancelAppointment(int64_t appointment_id) {
 
     if (apt->status == AppointmentStatus::Cancelled) {
         return Result<void>::failure("该挂号已取消");
+    }
+
+    if (apt->status == AppointmentStatus::Completed) {
+        return Result<void>::failure("该挂号已完成，无法取消");
     }
 
     apt->status = AppointmentStatus::Cancelled;
@@ -180,7 +183,7 @@ Result<Appointment> AppointmentService::autoRouteAppointment(
 }
 
 // ============================================================
-// 呼叫下一位患者（优先队列出队）
+// 呼叫下一位患者（数据库驱动）
 // ============================================================
 
 Result<Appointment> AppointmentService::callNextPatient(int64_t doctor_id) {
@@ -193,40 +196,61 @@ Result<Appointment> AppointmentService::callNextPatient(int64_t doctor_id) {
         return Result<Appointment>::failure(msg.str());
     }
 
-    auto& queue = getOrCreateQueue(doctor_id);
-
-    // 如果内存队列为空，从数据库加载所有等待中的挂号
-    if (queue.empty()) {
-        auto waitingList = appointmentRepo_->findByDoctor(doctor_id);
-        std::vector<Appointment> waiting;
-        for (const auto& apt : waitingList) {
-            if (apt.status == AppointmentStatus::Waiting) {
-                waiting.push_back(apt);
-            }
+    // 从数据库查询该医生所有等待中的挂号
+    auto waitingList = appointmentRepo_->findByDoctor(doctor_id);
+    std::vector<Appointment> waiting;
+    for (const auto& apt : waitingList) {
+        if (apt.status == AppointmentStatus::Waiting) {
+            waiting.push_back(apt);
         }
-        if (waiting.empty()) {
-            return Result<Appointment>::failure("当前没有等待中的患者");
-        }
-        queue.enqueueBatch(waiting);
     }
 
-    // 从优先队列弹出最高优先级的患者
+    if (waiting.empty()) {
+        return Result<Appointment>::failure("当前没有等待中的患者");
+    }
+
+    // 使用优先队列选择最高优先级的患者
+    PriorityQueueStrategy queue;
+    queue.enqueueBatch(waiting);
     auto next = queue.dequeue();
     if (!next) {
         return Result<Appointment>::failure("当前没有等待中的患者");
     }
 
-    // 更新数据库状态为已完成
-    next->status = AppointmentStatus::Completed;
+    // 更新数据库状态为就诊中（InProgress）
+    next->status = AppointmentStatus::InProgress;
     appointmentRepo_->update(*next);
 
+    return Result<Appointment>::success(*next);
+}
+
+// ============================================================
+// 完成就诊
+// ============================================================
+
+Result<void> AppointmentService::completeAppointment(int64_t appointment_id) {
+    std::lock_guard<std::mutex> lock(serviceMutex_);
+
+    auto apt = appointmentRepo_->findById(appointment_id);
+    if (!apt) {
+        return Result<void>::failure("挂号记录不存在");
+    }
+
+    if (apt->status != AppointmentStatus::InProgress) {
+        return Result<void>::failure("该挂号不在就诊状态");
+    }
+
+    apt->status = AppointmentStatus::Completed;
+    appointmentRepo_->update(*apt);
+
     // 医生接诊人数减 1
-    if (doctor->current_patients > 0) {
+    auto doctor = doctorRepo_->findById(apt->doctor_id);
+    if (doctor && doctor->current_patients > 0) {
         doctor->current_patients--;
         doctorRepo_->update(*doctor);
     }
 
-    return Result<Appointment>::success(*next);
+    return Result<void>::success();
 }
 
 // ============================================================
@@ -270,22 +294,6 @@ Result<int> AppointmentService::estimateWaitTime(int64_t appointment_id) {
     }
 
     return Result<int>::success(aheadCount * MINUTES_PER_PATIENT);
-}
-
-// ============================================================
-// 工具方法
-// ============================================================
-
-PriorityQueueStrategy& AppointmentService::getOrCreateQueue(int64_t doctor_id) {
-    std::lock_guard<std::mutex> lock(queueMapMutex_);
-    auto it = doctorQueues_.find(doctor_id);
-    if (it == doctorQueues_.end()) {
-        auto queue = std::make_unique<PriorityQueueStrategy>();
-        auto& ref = *queue;
-        doctorQueues_[doctor_id] = std::move(queue);
-        return ref;
-    }
-    return *(it->second);
 }
 
 } // namespace hospital

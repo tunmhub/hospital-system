@@ -1,7 +1,8 @@
 # 医院挂号系统 - 改进建议清单
 
 > 分析日期：2026-06-17  
-> 覆盖范围：C++ 后端、MySQL 持久层、Vue3 前端、工程配置
+> 覆盖范围：C++ 后端、MySQL 持久层、Vue3 前端、工程配置  
+> **最后更新**：2026-06-17 P0 阶段修复完成
 
 ## 总体印象
 
@@ -19,7 +20,7 @@
 
 ## 高优先级：安全与稳定性
 
-### 1. `MySQLAppointmentRepository` 存在 SQL 注入风险
+### 1. `MySQLAppointmentRepository` 存在 SQL 注入风险 ✅ 已修复
 
 **位置**：`src/repository/mysql/MySQLAppointmentRepository.cpp`
 
@@ -33,6 +34,10 @@
 **建议**：
 - 统一使用 MySQL 预处理语句（`mysql_stmt_prepare` / `mysql_stmt_bind_param`）
 - 或者至少对 `status` / `priority` 做白名单校验，禁止字符串拼接
+
+**修复状态**：✅ 已完成（2026-06-17）
+- 所有方法已改为预处理语句
+- 涉及方法：`findById`、`save`、`update`、`remove`、`findByDoctor`、`findByPatient`、`countWaitingByDoctor`
 
 ### 2. 业务逻辑不是真正的事务
 
@@ -61,7 +66,7 @@
 - 对医生维度进行细粒度加锁（`std::mutex per doctor_id`）
 - 或者将并发控制下沉到数据库层，利用 `SELECT ... FOR UPDATE` + 事务实现抢号
 
-### 4. 内存队列与数据库状态不一致
+### 4. 内存队列与数据库状态不一致 ✅ 已修复
 
 **位置**：`src/service/AppointmentService.cpp` 中的 `doctorQueues_`
 
@@ -75,6 +80,10 @@
 - 叫号逻辑以数据库为唯一真相源
 - 取消内存队列缓存，每次从数据库查询等待中的挂号
 - 或使用 Redis 等分布式队列替代内存队列
+
+**修复状态**：✅ 已完成（2026-06-17）
+- 删除 `doctorQueues_` 内存队列和 `getOrCreateQueue()` 方法
+- `callNextPatient()` 改为每次从数据库查询
 
 ---
 
@@ -97,7 +106,7 @@
   - `waiting_count`：当前等待/就诊中人数（用于负载判断）
   - `completed_count`：今日已完成人数
 
-### 6. 缺少 `InProgress` 状态流转
+### 6. 缺少 `InProgress` 状态流转 ✅ 已修复
 
 **位置**：`src/service/AppointmentService.cpp` 中的 `callNextPatient`
 
@@ -107,12 +116,17 @@
 next->status = AppointmentStatus::Completed;
 ```
 
-缺少“就诊中”中间状态，无法区分“已叫号正在就诊”和“医生已结束诊疗”。
+缺少”就诊中”中间状态，无法区分”已叫号正在就诊”和”医生已结束诊疗”。
 
 **建议**：
 - 叫号时改为 `InProgress`
-- 增加“结束就诊”接口，将状态改为 `Completed`
+- 增加”结束就诊”接口，将状态改为 `Completed`
 - 等待时间预估和队列显示据此调整
+
+**修复状态**：✅ 已完成（2026-06-17）
+- `callNextPatient()` 状态改为 `InProgress`
+- 新增 `completeAppointment()` 方法
+- 新增 `POST /api/appointments/:id/complete` 接口
 
 ### 7. 等待时间预估前后端不一致
 
@@ -307,3 +321,303 @@ baseURL: import.meta.env.DEV ? '' : ''
 | 前端视图 | `web/src/views/Home.vue`、`patient/index.vue`、`doctor/index.vue`、`screen/index.vue` |
 | 前端样式 | `web/src/assets/main.scss` |
 | 数据库脚本 | `sql/schema.sql` |
+
+
+---
+
+## 附录：补充问题（Code Review 额外发现）
+
+以下为 Code Review 过程中发现的、原改进建议清单中未提及的问题。
+
+### 19. cancelAppointment 未检查 Completed 状态 ✅ 已修复
+
+**位置**：src/service/AppointmentService.cpp:81-96
+
+**问题**：当前只检查 Cancelled 状态，未检查 Completed。已完成的挂号仍可被取消，导致医生 current_patients 被错误减少。
+
+**建议**：在取消前增加判断：
+```cpp
+if (apt->status == AppointmentStatus::Completed) {
+    return Result<void>::failure("该挂号已完成，无法取消");
+}
+```
+
+**修复状态**：✅ 已完成（2026-06-17）
+- 已在 `cancelAppointment()` 中添加 Completed 状态检查
+
+### 20. 前端依赖后端未提供的 patient_name / doctor_name / department 字段 ✅ 已修复
+
+**位置**：
+- web/src/views/doctor/index.vue:80 - result.patient_name
+- web/src/views/screen/index.vue:57 - item.patient_name
+- web/src/views/patient/index.vue:120 - result.doctor_name, result.department
+
+**问题**：后端 API 返回的 JSON 只包含 patient_id / doctor_id，前端读取不存在的字段会显示 undefined 或空。
+
+**建议**：后端 JOIN 患者/医生表返回名称，或前端用已有列表做二次匹配。
+
+**修复状态**：✅ 已完成（2026-06-17）
+- 在 `ApiController` 中查询患者/医生信息并组装返回
+- 涉及接口：`handleGetDoctorQueue`、`handleMakeAppointment`、`handleAutoRouteAppointment`、`handleCallNextPatient`
+- 返回字段包含：`patient_name`、`doctor_name`、`department`
+
+### 21. std::stoll / std::stoi 未分类处理异常
+
+**位置**：src/api/ApiController.cpp 多处
+
+**问题**：URL 参数不是有效数字时，虽然被 std::exception 捕获，但返回 400 且错误信息不友好，可能暴露内部异常。
+
+**建议**：
+# 0 "<stdin>"
+# 0 "<built-in>"
+# 0 "<command-line>"
+# 1 "/usr/include/stdc-predef.h" 1 3 4
+# 0 "<command-line>" 2
+# 1 "<stdin>"
+
+### 22. Result<T>::value() 失败时访问会崩溃
+
+**位置**：include/common/Result.h:42-43
+
+**问题**：ok() 为 false 时调用 value() 会抛出 std::bad_optional_access。
+
+**建议**：
+# 0 "<stdin>"
+# 0 "<built-in>"
+# 0 "<command-line>"
+# 1 "/usr/include/stdc-predef.h" 1 3 4
+# 0 "<command-line>" 2
+# 1 "<stdin>"
+
+### 23. screen/index.vue 状态过滤逻辑硬编码且不完整
+
+**位置**：web/src/views/screen/index.vue:75
+
+**问题**：同时判断 'waiting' || 0 || 'WAITING'，说明前端不确定后端返回格式；未处理 in_progress 状态。
+
+**建议**：与后端约定明确的状态字符串，统一判断逻辑。
+
+### 24. main.cpp 中 std::atoi 对无效输入返回 0
+
+**位置**：src/main.cpp:55-60
+
+**问题**：MYSQL_PORT=abc 时 std::atoi 返回 0，导致 MySQL 连接失败且错误信息不明确。
+
+**建议**：
+# 0 "<stdin>"
+# 0 "<built-in>"
+# 0 "<command-line>"
+# 1 "/usr/include/stdc-predef.h" 1 3 4
+# 0 "<command-line>" 2
+# 1 "<stdin>"
+
+### 25. estimateWaitTime() 未加锁
+
+**位置**：src/service/AppointmentService.cpp:225-260
+
+**问题**：读操作未加 serviceMutex_，可能读到 makeAppointment / cancelAppointment 的中间状态。
+
+**建议**：使用数据库事务隔离级别或在 Service 层增加读锁。
+
+### 26. doctor/index.vue 中 current_patients 被当作等待人数
+
+**位置**：web/src/views/doctor/index.vue:32
+
+**问题**：totalWaiting 用 doc.current_patients 累加，但该字段表示已接诊/负载而非正在等待人数。
+
+**建议**：后端提供专门的统计接口，或前端只展示负载比例。
+
+---
+
+## 附录：补充问题（Code Review 额外发现）
+
+以下为 Code Review 过程中发现的、原改进建议清单中未提及的问题。
+
+### 19. cancelAppointment 未检查 Completed 状态
+
+**位置**：src/service/AppointmentService.cpp:81-96
+
+**问题**：当前只检查 Cancelled 状态，未检查 Completed。已完成的挂号仍可被取消，导致医生 current_patients 被错误减少。
+
+**建议**：在取消前增加判断：
+```cpp
+if (apt->status == AppointmentStatus::Completed) {
+    return Result<void>::failure("该挂号已完成，无法取消");
+}
+```
+
+### 20. 前端依赖后端未提供的 patient_name / doctor_name / department 字段
+
+**位置**：
+- web/src/views/doctor/index.vue:80 - result.patient_name
+- web/src/views/screen/index.vue:57 - item.patient_name
+- web/src/views/patient/index.vue:120 - result.doctor_name, result.department
+
+**问题**：后端 API 返回的 JSON 只包含 patient_id / doctor_id，前端读取不存在的字段会显示 undefined 或空。
+
+**建议**：后端 JOIN 患者/医生表返回名称，或前端用已有列表做二次匹配。
+
+### 21. std::stoll / std::stoi 未分类处理异常
+
+**位置**：src/api/ApiController.cpp 多处
+
+**问题**：URL 参数不是有效数字时，虽然被 std::exception 捕获，但返回 400 且错误信息不友好，可能暴露内部异常。
+
+**建议**：
+```cpp
+try {
+    int64_t id = std::stoll(req.matches[1]);
+} catch (const std::invalid_argument&) {
+    setErrorResponse(res, 400, "ID 格式无效");
+} catch (const std::out_of_range&) {
+    setErrorResponse(res, 400, "ID 超出范围");
+}
+```
+
+### 22. Result<T>::value() 失败时访问会崩溃
+
+**位置**：include/common/Result.h:42-43
+
+**问题**：ok() 为 false 时调用 value() 会抛出 std::bad_optional_access。
+
+**建议**：
+```cpp
+const T& value() const {
+    if (!ok_) throw std::runtime_error("访问失败结果的值: " + error_message_);
+    return value_.value();
+}
+```
+
+### 23. screen/index.vue 状态过滤逻辑硬编码且不完整
+
+**位置**：web/src/views/screen/index.vue:75
+
+**问题**：同时判断 'waiting' || 0 || 'WAITING'，说明前端不确定后端返回格式；未处理 in_progress 状态。
+
+**建议**：与后端约定明确的状态字符串，统一判断逻辑。
+
+### 24. main.cpp 中 std::atoi 对无效输入返回 0
+
+**位置**：src/main.cpp:55-60
+
+**问题**：MYSQL_PORT=abc 时 std::atoi 返回 0，导致 MySQL 连接失败且错误信息不明确。
+
+**建议**：
+```cpp
+if (auto portStr = std::getenv("MYSQL_PORT")) {
+    config.port = std::stoul(portStr);
+}
+```
+
+### 25. estimateWaitTime() 未加锁
+
+**位置**：src/service/AppointmentService.cpp:225-260
+
+**问题**：读操作未加 serviceMutex_，可能读到 makeAppointment / cancelAppointment 的中间状态。
+
+**建议**：使用数据库事务隔离级别或在 Service 层增加读锁。
+
+### 26. doctor/index.vue 中 current_patients 被当作等待人数
+
+**位置**：web/src/views/doctor/index.vue:32
+
+**问题**：totalWaiting 用 doc.current_patients 累加，但该字段表示已接诊/负载而非正在等待人数。
+
+**建议**：后端提供专门的统计接口，或前端只展示负载比例。
+---
+
+## 附录：补充问题（Code Review 额外发现）
+
+以下为 Code Review 过程中发现的、原改进建议清单中未提及的问题。
+
+### 19. cancelAppointment 未检查 Completed 状态
+
+**位置**：src/service/AppointmentService.cpp:81-96
+
+**问题**：当前只检查 Cancelled 状态，未检查 Completed。已完成的挂号仍可被取消，导致医生 current_patients 被错误减少。
+
+**建议**：在取消前增加判断：
+```cpp
+if (apt->status == AppointmentStatus::Completed) {
+    return Result<void>::failure("该挂号已完成，无法取消");
+}
+```
+
+### 20. 前端依赖后端未提供的 patient_name / doctor_name / department 字段
+
+**位置**：
+- web/src/views/doctor/index.vue:80 - result.patient_name
+- web/src/views/screen/index.vue:57 - item.patient_name
+- web/src/views/patient/index.vue:120 - result.doctor_name, result.department
+
+**问题**：后端 API 返回的 JSON 只包含 patient_id / doctor_id，前端读取不存在的字段会显示 undefined 或空。
+
+**建议**：后端 JOIN 患者/医生表返回名称，或前端用已有列表做二次匹配。
+
+### 21. std::stoll / std::stoi 未分类处理异常
+
+**位置**：src/api/ApiController.cpp 多处
+
+**问题**：URL 参数不是有效数字时，虽然被 std::exception 捕获，但返回 400 且错误信息不友好，可能暴露内部异常。
+
+**建议**：
+```cpp
+try {
+    int64_t id = std::stoll(req.matches[1]);
+} catch (const std::invalid_argument&) {
+    setErrorResponse(res, 400, "ID 格式无效");
+} catch (const std::out_of_range&) {
+    setErrorResponse(res, 400, "ID 超出范围");
+}
+```
+
+### 22. Result<T>::value() 失败时访问会崩溃
+
+**位置**：include/common/Result.h:42-43
+
+**问题**：ok() 为 false 时调用 value() 会抛出 std::bad_optional_access。
+
+**建议**：
+```cpp
+const T& value() const {
+    if (!ok_) throw std::runtime_error("访问失败结果的值: " + error_message_);
+    return value_.value();
+}
+```
+
+### 23. screen/index.vue 状态过滤逻辑硬编码且不完整
+
+**位置**：web/src/views/screen/index.vue:75
+
+**问题**：同时判断 'waiting' || 0 || 'WAITING'，说明前端不确定后端返回格式；未处理 in_progress 状态。
+
+**建议**：与后端约定明确的状态字符串，统一判断逻辑。
+
+### 24. main.cpp 中 std::atoi 对无效输入返回 0
+
+**位置**：src/main.cpp:55-60
+
+**问题**：MYSQL_PORT=abc 时 std::atoi 返回 0，导致 MySQL 连接失败且错误信息不明确。
+
+**建议**：
+```cpp
+if (auto portStr = std::getenv("MYSQL_PORT")) {
+    config.port = std::stoul(portStr);
+}
+```
+
+### 25. estimateWaitTime() 未加锁
+
+**位置**：src/service/AppointmentService.cpp:225-260
+
+**问题**：读操作未加 serviceMutex_，可能读到 makeAppointment / cancelAppointment 的中间状态。
+
+**建议**：使用数据库事务隔离级别或在 Service 层增加读锁。
+
+### 26. doctor/index.vue 中 current_patients 被当作等待人数
+
+**位置**：web/src/views/doctor/index.vue:32
+
+**问题**：totalWaiting 用 doc.current_patients 累加，但该字段表示已接诊/负载而非正在等待人数。
+
+**建议**：后端提供专门的统计接口，或前端只展示负载比例。

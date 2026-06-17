@@ -46,6 +46,7 @@ private:
     void handleGetDoctorQueue(const httplib::Request& req, httplib::Response& res);
     void handleAutoRouteAppointment(const httplib::Request& req, httplib::Response& res);
     void handleCallNextPatient(const httplib::Request& req, httplib::Response& res);
+    void handleCompleteAppointment(const httplib::Request& req, httplib::Response& res);
     void handleEstimateWaitTime(const httplib::Request& req, httplib::Response& res);
 
     // ---- 工具方法 ----
