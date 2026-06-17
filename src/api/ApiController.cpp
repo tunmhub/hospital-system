@@ -3,10 +3,26 @@
 
 #include <json.hpp>
 #include <iostream>
+#include <optional>
 
 using json = nlohmann::json;
 
 namespace hospital {
+
+/// 安全解析 ID 字符串为 int64_t
+/// @return 解析成功返回值，失败返回 std::nullopt
+static std::optional<int64_t> parseId(const std::string& s) {
+    try {
+        size_t pos = 0;
+        long long val = std::stoll(s, &pos);
+        if (pos != s.size()) return std::nullopt;  // 有额外字符
+        return static_cast<int64_t>(val);
+    } catch (const std::invalid_argument&) {
+        return std::nullopt;
+    } catch (const std::out_of_range&) {
+        return std::nullopt;
+    }
+}
 
 ApiController::ApiController(
     std::shared_ptr<IPatientRepository> patientRepo,
@@ -146,8 +162,12 @@ void ApiController::handleCreatePatient(const httplib::Request& req, httplib::Re
 
 void ApiController::handleGetPatient(const httplib::Request& req, httplib::Response& res) {
     try {
-        int64_t id = std::stoll(req.matches[1]);
-        auto patient = patientRepo_->findById(id);
+        auto idOpt = parseId(req.matches[1]);
+        if (!idOpt) {
+            setErrorResponse(res, 400, "无效的患者 ID");
+            return;
+        }
+        auto patient = patientRepo_->findById(*idOpt);
 
         if (!patient) {
             setErrorResponse(res, 404, "患者不存在");
@@ -193,8 +213,12 @@ void ApiController::handleListPatients(const httplib::Request& /*req*/, httplib:
 
 void ApiController::handleGetPatientAppointments(const httplib::Request& req, httplib::Response& res) {
     try {
-        int64_t patientId = std::stoll(req.matches[1]);
-        auto result = appointmentService_->getAppointmentsByPatient(patientId);
+        auto patientIdOpt = parseId(req.matches[1]);
+        if (!patientIdOpt) {
+            setErrorResponse(res, 400, "无效的患者 ID");
+            return;
+        }
+        auto result = appointmentService_->getAppointmentsByPatient(*patientIdOpt);
 
         if (!result.ok()) {
             setErrorResponse(res, 400, result.errorMessage());
@@ -248,8 +272,12 @@ void ApiController::handleListDoctors(const httplib::Request& /*req*/, httplib::
 
 void ApiController::handleGetDoctorQueue(const httplib::Request& req, httplib::Response& res) {
     try {
-        int64_t doctorId = std::stoll(req.matches[1]);
-        auto result = appointmentService_->getQueueByDoctor(doctorId);
+        auto doctorIdOpt = parseId(req.matches[1]);
+        if (!doctorIdOpt) {
+            setErrorResponse(res, 400, "无效的医生 ID");
+            return;
+        }
+        auto result = appointmentService_->getQueueByDoctor(*doctorIdOpt);
 
         if (!result.ok()) {
             setErrorResponse(res, 400, result.errorMessage());
@@ -257,7 +285,7 @@ void ApiController::handleGetDoctorQueue(const httplib::Request& req, httplib::R
         }
 
         // 获取医生信息
-        auto doctor = doctorRepo_->findById(doctorId);
+        auto doctor = doctorRepo_->findById(*doctorIdOpt);
         std::string doctorName = doctor ? doctor->name : "";
         std::string department = doctor ? doctor->department : "";
 
@@ -349,8 +377,12 @@ void ApiController::handleMakeAppointment(const httplib::Request& req, httplib::
 
 void ApiController::handleCancelAppointment(const httplib::Request& req, httplib::Response& res) {
     try {
-        int64_t appointmentId = std::stoll(req.matches[1]);
-        auto result = appointmentService_->cancelAppointment(appointmentId);
+        auto appointmentIdOpt = parseId(req.matches[1]);
+        if (!appointmentIdOpt) {
+            setErrorResponse(res, 400, "无效的挂号 ID");
+            return;
+        }
+        auto result = appointmentService_->cancelAppointment(*appointmentIdOpt);
 
         if (!result.ok()) {
             setErrorResponse(res, 400, result.errorMessage());
@@ -424,8 +456,12 @@ void ApiController::handleAutoRouteAppointment(const httplib::Request& req, http
 
 void ApiController::handleCallNextPatient(const httplib::Request& req, httplib::Response& res) {
     try {
-        int64_t doctorId = std::stoll(req.matches[1]);
-        auto result = appointmentService_->callNextPatient(doctorId);
+        auto doctorIdOpt = parseId(req.matches[1]);
+        if (!doctorIdOpt) {
+            setErrorResponse(res, 400, "无效的医生 ID");
+            return;
+        }
+        auto result = appointmentService_->callNextPatient(*doctorIdOpt);
 
         if (!result.ok()) {
             setErrorResponse(res, 400, result.errorMessage());
@@ -459,8 +495,12 @@ void ApiController::handleCallNextPatient(const httplib::Request& req, httplib::
 
 void ApiController::handleCompleteAppointment(const httplib::Request& req, httplib::Response& res) {
     try {
-        int64_t appointmentId = std::stoll(req.matches[1]);
-        auto result = appointmentService_->completeAppointment(appointmentId);
+        auto appointmentIdOpt = parseId(req.matches[1]);
+        if (!appointmentIdOpt) {
+            setErrorResponse(res, 400, "无效的挂号 ID");
+            return;
+        }
+        auto result = appointmentService_->completeAppointment(*appointmentIdOpt);
 
         if (!result.ok()) {
             setErrorResponse(res, 400, result.errorMessage());
@@ -477,8 +517,12 @@ void ApiController::handleCompleteAppointment(const httplib::Request& req, httpl
 
 void ApiController::handleEstimateWaitTime(const httplib::Request& req, httplib::Response& res) {
     try {
-        int64_t appointmentId = std::stoll(req.matches[1]);
-        auto result = appointmentService_->estimateWaitTime(appointmentId);
+        auto appointmentIdOpt = parseId(req.matches[1]);
+        if (!appointmentIdOpt) {
+            setErrorResponse(res, 400, "无效的挂号 ID");
+            return;
+        }
+        auto result = appointmentService_->estimateWaitTime(*appointmentIdOpt);
 
         if (!result.ok()) {
             setErrorResponse(res, 400, result.errorMessage());
@@ -486,7 +530,7 @@ void ApiController::handleEstimateWaitTime(const httplib::Request& req, httplib:
         }
 
         json resp = {
-            {"appointment_id", appointmentId},
+            {"appointment_id", *appointmentIdOpt},
             {"wait_minutes",   result.value()}
         };
         setJsonResponse(res, 200, resp.dump());

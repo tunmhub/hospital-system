@@ -2,6 +2,7 @@
 
 #include <string>
 #include <optional>
+#include <stdexcept>
 
 namespace hospital {
 
@@ -37,8 +38,15 @@ public:
     bool ok() const { return ok_; }
 
     /// 获取值（成功时调用）
-    const T& value() const { return value_.value(); }
-    T& value() { return value_.value(); }
+    /// @throws std::runtime_error 如果结果是失败状态
+    const T& value() const {
+        if (!ok_) throw std::runtime_error("访问失败结果的值: " + error_message_);
+        return value_.value();
+    }
+    T& value() {
+        if (!ok_) throw std::runtime_error("访问失败结果的值: " + error_message_);
+        return value_.value();
+    }
 
     /// 获取错误信息（失败时调用）
     const std::string& errorMessage() const { return error_message_; }

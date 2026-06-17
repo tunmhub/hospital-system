@@ -21,7 +21,7 @@ public:
     std::vector<Appointment> findByDoctor(int64_t doctor_id) override;
     std::vector<Appointment> findByPatient(int64_t patient_id) override;
     size_t countWaitingByDoctor(int64_t doctor_id) override;
-    int getNextQueueNumber() override;
+    int getNextQueueNumber(int64_t doctor_id) override;
 
 private:
     Appointment parseRow(MYSQL_ROW row);

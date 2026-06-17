@@ -493,28 +493,98 @@ size_t MySQLAppointmentRepository::countWaitingByDoctor(int64_t doctor_id) {
     return static_cast<size_t>(count);
 }
 
-int MySQLAppointmentRepository::getNextQueueNumber() {
+int MySQLAppointmentRepository::getNextQueueNumber(int64_t doctor_id) {
     auto conn = pool_->getConnection();
 
-    const char* sql = "SELECT COALESCE(MAX(queue_number), 0) + 1 FROM appointments";
+    // 使用 INSERT ... ON DUPLICATE KEY UPDATE 实现原子递增
+    // 首先确保表存在
+    const char* create_sql = "CREATE TABLE IF NOT EXISTS queue_sequences ("
+                             "doctor_id BIGINT NOT NULL, "
+                             "seq_date DATE NOT NULL, "
+                             "last_number INT NOT NULL DEFAULT 0, "
+                             "PRIMARY KEY (doctor_id, seq_date))";
 
-    if (mysql_query(conn.get(), sql) != 0) {
-        throw DatabaseException(std::string("获取排队号失败: ") + mysql_error(conn.get()));
+    if (mysql_query(conn.get(), create_sql) != 0) {
+        throw DatabaseException(std::string("创建序列表失败: ") + mysql_error(conn.get()));
     }
 
-    MYSQL_RES* result = mysql_store_result(conn.get());
-    if (!result) {
-        throw DatabaseException(std::string("获取结果集失败: ") + mysql_error(conn.get()));
+    // 插入或递增当天的序列号
+    const char* upsert_sql = "INSERT INTO queue_sequences (doctor_id, seq_date, last_number) "
+                             "VALUES (?, CURDATE(), 1) "
+                             "ON DUPLICATE KEY UPDATE last_number = last_number + 1";
+
+    auto stmt = mysql_stmt_init(conn.get());
+    if (!stmt) {
+        throw DatabaseException("初始化语句失败");
     }
 
-    int next = 1;
-    MYSQL_ROW row = mysql_fetch_row(result);
-    if (row && row[0]) {
-        next = std::stoi(row[0]);
+    if (mysql_stmt_prepare(stmt, upsert_sql, strlen(upsert_sql)) != 0) {
+        mysql_stmt_close(stmt);
+        throw DatabaseException(std::string("准备语句失败: ") + mysql_error(conn.get()));
     }
 
-    mysql_free_result(result);
-    return next;
+    MYSQL_BIND bind[1] = {};
+    long long param_doctor_id = doctor_id;
+    bind[0].buffer_type = MYSQL_TYPE_LONGLONG;
+    bind[0].buffer = &param_doctor_id;
+
+    if (mysql_stmt_bind_param(stmt, bind) != 0) {
+        mysql_stmt_close(stmt);
+        throw DatabaseException(std::string("绑定参数失败: ") + mysql_error(conn.get()));
+    }
+
+    if (mysql_stmt_execute(stmt) != 0) {
+        mysql_stmt_close(stmt);
+        throw DatabaseException(std::string("执行更新失败: ") + mysql_error(conn.get()));
+    }
+
+    mysql_stmt_close(stmt);
+
+    // 查询当前值
+    const char* select_sql = "SELECT last_number FROM queue_sequences "
+                             "WHERE doctor_id = ? AND seq_date = CURDATE()";
+
+    stmt = mysql_stmt_init(conn.get());
+    if (!stmt) {
+        throw DatabaseException("初始化语句失败");
+    }
+
+    if (mysql_stmt_prepare(stmt, select_sql, strlen(select_sql)) != 0) {
+        mysql_stmt_close(stmt);
+        throw DatabaseException(std::string("准备语句失败: ") + mysql_error(conn.get()));
+    }
+
+    MYSQL_BIND select_bind[1] = {};
+    select_bind[0].buffer_type = MYSQL_TYPE_LONGLONG;
+    select_bind[0].buffer = &param_doctor_id;
+
+    if (mysql_stmt_bind_param(stmt, select_bind) != 0) {
+        mysql_stmt_close(stmt);
+        throw DatabaseException(std::string("绑定参数失败: ") + mysql_error(conn.get()));
+    }
+
+    if (mysql_stmt_execute(stmt) != 0) {
+        mysql_stmt_close(stmt);
+        throw DatabaseException(std::string("执行查询失败: ") + mysql_error(conn.get()));
+    }
+
+    MYSQL_BIND result_bind[1] = {};
+    int last_number = 0;
+    result_bind[0].buffer_type = MYSQL_TYPE_LONG;
+    result_bind[0].buffer = &last_number;
+
+    if (mysql_stmt_bind_result(stmt, result_bind) != 0) {
+        mysql_stmt_close(stmt);
+        throw DatabaseException(std::string("绑定结果失败: ") + mysql_error(conn.get()));
+    }
+
+    if (mysql_stmt_fetch(stmt) != 0) {
+        mysql_stmt_close(stmt);
+        throw DatabaseException(std::string("获取结果失败: ") + mysql_error(conn.get()));
+    }
+
+    mysql_stmt_close(stmt);
+    return last_number;
 }
 
 Appointment MySQLAppointmentRepository::parseRow(MYSQL_ROW row) {

@@ -142,9 +142,12 @@ mysql_stmt_execute(stmt);
 
 ---
 
-## 第二阶段：P1 稳定性与并发修复
+## 第二阶段：P1 稳定性与并发修复 ✅ 已完成
 
-### 6. 替换全局单锁 `serviceMutex_`
+> **完成时间**：2026-06-17
+> **验证状态**：编译通过
+
+### 6. 替换全局单锁 `serviceMutex_` ✅
 
 **方案**：
 - 短期：按医生维度加锁 `std::unordered_map<int64_t, std::mutex> doctorLocks_`。
@@ -157,9 +160,16 @@ std::mutex& getDoctorLock(int64_t doctor_id) {
 }
 ```
 
+**实现**：
+- 将 `serviceMutex_` 替换为 `std::unordered_map<int64_t, std::unique_ptr<std::mutex>> doctorLocks_`
+- 新增 `getDoctorLock(doctor_id)` 方法按需创建医生级锁
+- `makeAppointment`、`cancelAppointment`、`callNextPatient`、`completeAppointment` 使用医生级锁
+- `autoRouteAppointment` 先选择目标医生，再获取该医生的锁
+- `estimateWaitTime` 添加读锁保护
+
 ---
 
-### 7. `queue_number` 按医生按日重置
+### 7. `queue_number` 按医生按日重置 ✅
 
 **方案**：
 - 新增表 `queue_sequences(doctor_id, date, last_number)`。
@@ -172,9 +182,15 @@ ON DUPLICATE KEY UPDATE last_number = last_number + 1;
 SELECT last_number FROM queue_sequences WHERE doctor_id = ? AND date = CURDATE();
 ```
 
+**实现**：
+- 新增 `queue_sequences(doctor_id BIGINT, seq_date DATE, last_number INT)` 表（自动创建）
+- `getNextQueueNumber(doctor_id)` 使用 `INSERT ... ON DUPLICATE KEY UPDATE` 原子递增
+- 更新 `IAppointmentRepository` 接口签名：`getNextQueueNumber(int64_t doctor_id)`
+- 同步更新 `MemoryAppointmentRepository` 实现
+
 ---
 
-### 8. `std::stoll` 异常分类处理
+### 8. `std::stoll` 异常分类处理 ✅
 
 在 `ApiController` 中增加一个辅助函数：
 
@@ -192,9 +208,14 @@ std::optional<int64_t> parseId(const std::string& s) {
 
 所有路由先调用 `parseId`，失败返回 400。
 
+**实现**：
+- 在 `ApiController.cpp` 新增 `parseId()` 辅助函数（含额外字符检查）
+- 替换所有 7 处 `std::stoll` 调用
+- 解析失败返回 400 错误："无效的 XXX ID"
+
 ---
 
-### 9. `Result<T>::value()` 增加保护
+### 9. `Result<T>::value()` 增加保护 ✅
 
 ```cpp
 const T& value() const {
@@ -203,14 +224,22 @@ const T& value() const {
 }
 ```
 
+**实现**：
+- 在 `value()` 方法中检查 `ok_` 状态
+- 失败时抛出带错误信息的 `std::runtime_error`
+
 ---
 
-### 10. `estimateWaitTime()` 加锁或事务读
+### 10. `estimateWaitTime()` 加锁或事务读 ✅
 
 ```cpp
 std::lock_guard<std::mutex> lock(serviceMutex_);
 // 原有逻辑
 ```
+
+**实现**：
+- 使用医生级锁 `getDoctorLock(apt->doctor_id)` 保护读操作
+- 先查询挂号记录获取 doctor_id，再获取对应医生的锁
 
 ---
 

@@ -15,6 +15,22 @@ AppointmentService::AppointmentService(
     , appointmentRepo_(std::move(appointmentRepo)) {}
 
 // ============================================================
+// 医生级锁管理
+// ============================================================
+
+std::mutex& AppointmentService::getDoctorLock(int64_t doctor_id) {
+    std::lock_guard<std::mutex> guard(lockMapMutex_);
+    auto it = doctorLocks_.find(doctor_id);
+    if (it == doctorLocks_.end()) {
+        auto lock = std::make_unique<std::mutex>();
+        auto* ptr = lock.get();
+        doctorLocks_[doctor_id] = std::move(lock);
+        return *ptr;
+    }
+    return *it->second;
+}
+
+// ============================================================
 // 内部挂号逻辑（不加锁，由调用方负责锁）
 // ============================================================
 
@@ -51,7 +67,7 @@ Result<Appointment> AppointmentService::makeAppointmentInternal(
     apt.doctor_id    = doctor_id;
     apt.status       = AppointmentStatus::Waiting;
     apt.priority     = priority;
-    apt.queue_number = appointmentRepo_->getNextQueueNumber();
+    apt.queue_number = appointmentRepo_->getNextQueueNumber(doctor_id);
 
     if (!appointmentRepo_->save(apt)) {
         return Result<Appointment>::failure("挂号记录保存失败");
@@ -73,17 +89,17 @@ Result<Appointment> AppointmentService::makeAppointmentInternal(
 
 Result<Appointment> AppointmentService::makeAppointment(
     int64_t patient_id, int64_t doctor_id, Priority priority) {
-    std::lock_guard<std::mutex> lock(serviceMutex_);
+    std::lock_guard<std::mutex> lock(getDoctorLock(doctor_id));
     return makeAppointmentInternal(patient_id, doctor_id, priority);
 }
 
 Result<void> AppointmentService::cancelAppointment(int64_t appointment_id) {
-    std::lock_guard<std::mutex> lock(serviceMutex_);
-
     auto apt = appointmentRepo_->findById(appointment_id);
     if (!apt) {
         return Result<void>::failure("挂号记录不存在");
     }
+
+    std::lock_guard<std::mutex> lock(getDoctorLock(apt->doctor_id));
 
     if (apt->status == AppointmentStatus::Cancelled) {
         return Result<void>::failure("该挂号已取消");
@@ -135,7 +151,6 @@ Result<std::vector<Appointment>> AppointmentService::getQueueByDoctor(int64_t do
 
 Result<Appointment> AppointmentService::autoRouteAppointment(
     int64_t patient_id, std::string_view department, Priority priority) {
-    std::lock_guard<std::mutex> lock(serviceMutex_);
 
     // 1. 检查患者是否存在
     auto patient = patientRepo_->findById(patient_id);
@@ -167,13 +182,14 @@ Result<Appointment> AppointmentService::autoRouteAppointment(
         minHeap.push({doc, doc.current_patients});
     }
 
-    // 4. 贪心选择：从堆顶取出负载最低的医生
+    // 4. 贪心选择：从堆顶取出负载最低的医生，获取该医生的锁后执行挂号
     while (!minHeap.empty()) {
         auto top = minHeap.top();
         minHeap.pop();
 
         if (top.load < top.doctor.max_patients) {
-            // 找到有空闲的医生，调用内部挂号（已持有锁，不能再调公开方法）
+            // 获取目标医生的锁，然后执行挂号
+            std::lock_guard<std::mutex> lock(getDoctorLock(top.doctor.id));
             return makeAppointmentInternal(patient_id, top.doctor.id, priority);
         }
     }
@@ -187,7 +203,7 @@ Result<Appointment> AppointmentService::autoRouteAppointment(
 // ============================================================
 
 Result<Appointment> AppointmentService::callNextPatient(int64_t doctor_id) {
-    std::lock_guard<std::mutex> lock(serviceMutex_);
+    std::lock_guard<std::mutex> lock(getDoctorLock(doctor_id));
 
     auto doctor = doctorRepo_->findById(doctor_id);
     if (!doctor) {
@@ -229,12 +245,12 @@ Result<Appointment> AppointmentService::callNextPatient(int64_t doctor_id) {
 // ============================================================
 
 Result<void> AppointmentService::completeAppointment(int64_t appointment_id) {
-    std::lock_guard<std::mutex> lock(serviceMutex_);
-
     auto apt = appointmentRepo_->findById(appointment_id);
     if (!apt) {
         return Result<void>::failure("挂号记录不存在");
     }
+
+    std::lock_guard<std::mutex> lock(getDoctorLock(apt->doctor_id));
 
     if (apt->status != AppointmentStatus::InProgress) {
         return Result<void>::failure("该挂号不在就诊状态");
@@ -262,6 +278,8 @@ Result<int> AppointmentService::estimateWaitTime(int64_t appointment_id) {
     if (!apt) {
         return Result<int>::failure("挂号记录不存在");
     }
+
+    std::lock_guard<std::mutex> lock(getDoctorLock(apt->doctor_id));
 
     if (apt->status != AppointmentStatus::Waiting) {
         return Result<int>::failure("该挂号不在等待状态");

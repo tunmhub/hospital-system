@@ -76,8 +76,9 @@ size_t MemoryAppointmentRepository::countWaitingByDoctor(int64_t doctor_id) {
     return count;
 }
 
-int MemoryAppointmentRepository::getNextQueueNumber() {
-    return queue_counter_.fetch_add(1);
+int MemoryAppointmentRepository::getNextQueueNumber(int64_t doctor_id) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return ++doctor_queue_counters_[doctor_id];
 }
 
 } // namespace hospital

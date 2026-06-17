@@ -1,5 +1,51 @@
 # 开发日志
 
+## 2026-06-17 16:00 - P1: 稳定性与并发修复
+
+完成 P1 阶段所有 5 项稳定性与并发修复任务。
+
+### 修复内容
+
+**6. 替换全局单锁 `serviceMutex_` 为医生级锁**
+- 将全局 `std::mutex serviceMutex_` 替换为 `std::unordered_map<int64_t, std::unique_ptr<std::mutex>> doctorLocks_`
+- 新增 `getDoctorLock(doctor_id)` 方法按需创建医生级锁
+- `makeAppointment`、`cancelAppointment`、`callNextPatient`、`completeAppointment` 使用医生级锁
+- `autoRouteAppointment` 先选择目标医生，再获取该医生的锁
+- `estimateWaitTime` 添加读锁保护
+
+**7. `queue_number` 按医生按日重置**
+- 新增 `queue_sequences(doctor_id BIGINT, seq_date DATE, last_number INT)` 表（自动创建）
+- `getNextQueueNumber(doctor_id)` 使用 `INSERT ... ON DUPLICATE KEY UPDATE` 原子递增
+- 更新 `IAppointmentRepository` 接口签名：`getNextQueueNumber(int64_t doctor_id)`
+- 同步更新 `MemoryAppointmentRepository` 实现
+
+**8. `std::stoll` 异常分类处理**
+- 在 `ApiController.cpp` 新增 `parseId()` 辅助函数（含额外字符检查）
+- 替换所有 7 处 `std::stoll` 调用
+- 解析失败返回 400 错误："无效的 XXX ID"
+
+**9. `Result<T>::value()` 增加保护**
+- 在 `value()` 方法中检查 `ok_` 状态
+- 失败时抛出带错误信息的 `std::runtime_error`
+
+**10. `estimateWaitTime()` 加锁保护**
+- 使用医生级锁 `getDoctorLock(apt->doctor_id)` 保护读操作
+- 先查询挂号记录获取 doctor_id，再获取对应医生的锁
+
+### 修改的文件
+- `include/common/Result.h` — value() 添加异常检查
+- `include/repository/IAppointmentRepository.h` — 更新 getNextQueueNumber 签名
+- `src/api/ApiController.cpp` — 添加 parseId()，替换所有 std::stoll
+- `src/service/AppointmentService.h` — 替换 serviceMutex_ 为 doctorLocks_
+- `src/service/AppointmentService.cpp` — 实现医生级锁，estimateWaitTime 加锁
+- `src/repository/mysql/MySQLAppointmentRepository.h/.cpp` — 实现按医生按日重置 queue_number
+- `src/repository/memory/MemoryAppointmentRepository.h/.cpp` — 同步更新接口
+
+### 验证结果
+- cmake 配置通过，make 编译 0 error / 0 warning
+
+---
+
 ## 2026-06-16 19:42 - Step 1: 基础框架搭建
 
 完成医院挂号系统 Step 1 基础框架搭建，项目从零代码到可编译运行。

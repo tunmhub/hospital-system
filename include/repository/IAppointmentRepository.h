@@ -20,8 +20,8 @@ public:
     /// 获取指定医生当前等待队列长度
     virtual size_t countWaitingByDoctor(int64_t doctor_id) = 0;
 
-    /// 获取当天最大排队号
-    virtual int getNextQueueNumber() = 0;
+    /// 获取指定医生当天的下一个排队号（按医生按日重置）
+    virtual int getNextQueueNumber(int64_t doctor_id) = 0;
 };
 
 } // namespace hospital

@@ -20,12 +20,12 @@ public:
     std::vector<Appointment> findByDoctor(int64_t doctor_id) override;
     std::vector<Appointment> findByPatient(int64_t patient_id) override;
     size_t countWaitingByDoctor(int64_t doctor_id) override;
-    int getNextQueueNumber() override;
+    int getNextQueueNumber(int64_t doctor_id) override;
 
 private:
     std::unordered_map<int64_t, Appointment> data_;
     int64_t next_id_ = 1;
-    std::atomic<int> queue_counter_{1};  ///< 排队号码原子计数器
+    std::unordered_map<int64_t, int> doctor_queue_counters_;  ///< 按医生分组的排队计数器
     mutable std::mutex mutex_;
 };
 

@@ -58,10 +58,16 @@ private:
     Result<Appointment> makeAppointmentInternal(
         int64_t patient_id, int64_t doctor_id, Priority priority);
 
+    /// 获取医生对应的锁（按需创建）
+    std::mutex& getDoctorLock(int64_t doctor_id);
+
     std::shared_ptr<IPatientRepository> patientRepo_;
     std::shared_ptr<IDoctorRepository> doctorRepo_;
     std::shared_ptr<IAppointmentRepository> appointmentRepo_;
-    std::mutex serviceMutex_;
+
+    /// 医生级细粒度锁（替代全局 serviceMutex_）
+    std::mutex lockMapMutex_;
+    std::unordered_map<int64_t, std::unique_ptr<std::mutex>> doctorLocks_;
 };
 
 } // namespace hospital
