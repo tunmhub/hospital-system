@@ -81,4 +81,35 @@ int MemoryAppointmentRepository::getNextQueueNumber(int64_t doctor_id) {
     return ++doctor_queue_counters_[doctor_id];
 }
 
+std::vector<DeptStat> MemoryAppointmentRepository::countWaitingByDepartment() {
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    // 按科室统计候诊人数
+    std::unordered_map<std::string, int> dept_counts;
+
+    for (const auto& [id, apt] : data_) {
+        if (apt.status == AppointmentStatus::Waiting) {
+            // 通过医生仓储获取科室信息
+            if (doctorRepo_) {
+                auto doctor = doctorRepo_->findById(apt.doctor_id);
+                if (doctor) {
+                    dept_counts[doctor->department]++;
+                }
+            }
+        }
+    }
+
+    // 转换为 DeptStat 向量
+    std::vector<DeptStat> stats;
+    for (const auto& [dept, count] : dept_counts) {
+        DeptStat stat;
+        stat.department = dept;
+        stat.waiting_count = count;
+        stat.estimated_wait_minutes = count * 10;  // 每人 10 分钟
+        stats.push_back(stat);
+    }
+
+    return stats;
+}
+
 } // namespace hospital

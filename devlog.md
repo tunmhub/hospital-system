@@ -1,5 +1,66 @@
 # 开发日志
 
+## 2026-06-17 20:00 - 补充课程设计基本要求功能
+
+根据 Phase1_Setup.md 课程设计要求，补充缺失的 3 项基本功能。
+
+### 完成内容
+
+**1. 患者添加"病历号"字段**
+- `Patient.h` 新增 `medical_record_no` 字段（如 MR20260001）
+- `schema.sql` patients 表新增 `medical_record_no VARCHAR(20) UNIQUE` 列
+- 100 条测试数据补充病历号：MR20260001 ~ MR20260100
+- MySQL/Memory Repository 适配新字段
+- API 返回 JSON 包含 `medical_record_no`
+
+**2. 医生添加"排班时段"字段**
+- `Doctor.h` 新增 `work_start` 和 `work_end` 字段（如 "08:00", "17:00"）
+- `schema.sql` doctors 表新增 `work_start VARCHAR(5)`、`work_end VARCHAR(5)` 列
+- 20 条医生数据补充排班时段：
+  - 普通科室：08:00-17:00 或 08:30-17:30
+  - 急诊科：00:00-23:59（24小时）/ 08:00-20:00 / 20:00-08:00
+- MySQL/Memory Repository 适配新字段
+- API 返回 JSON 包含 `work_start`、`work_end`
+
+**3. 新增"科室候诊人数统计"API**
+- `IAppointmentRepository.h` 新增 `DeptStat` 结构体和 `countWaitingByDepartment()` 方法
+- `MySQLAppointmentRepository` 实现 SQL：按科室分组统计候诊人数
+- `MemoryAppointmentRepository` 注入 `IDoctorRepository` 实现按科室统计
+- 新增 `GET /api/departments/stats` 接口
+- 返回数据：各科室候诊人数 + 预计等待时间（每人 10 分钟）
+
+### 修改的文件（12个）
+
+**Model 层：**
+- `include/model/Patient.h` — 新增 `medical_record_no` 字段
+- `include/model/Doctor.h` — 新增 `work_start`、`work_end` 字段
+
+**数据库：**
+- `sql/schema.sql` — 新增列 + 补充测试数据
+
+**Repository 接口：**
+- `include/repository/IAppointmentRepository.h` — 新增 `DeptStat` 结构体和方法
+
+**MySQL 实现：**
+- `src/repository/mysql/MySQLPatientRepository.cpp` — 适配病历号字段
+- `src/repository/mysql/MySQLDoctorRepository.cpp` — 适配排班时段字段
+- `src/repository/mysql/MySQLAppointmentRepository.h` — 新增方法声明
+- `src/repository/mysql/MySQLAppointmentRepository.cpp` — 实现科室统计
+
+**Memory 实现：**
+- `src/repository/memory/MemoryAppointmentRepository.h` — 注入 IDoctorRepository
+- `src/repository/memory/MemoryAppointmentRepository.cpp` — 实现科室统计
+
+**API 层：**
+- `src/api/ApiController.h` — 新增 handleDepartmentStats 方法
+- `src/api/ApiController.cpp` — 注册路由 + 实现处理函数 + JSON 字段适配
+
+### 验证结果
+- 编译通过：`make` 成功，0 error / 0 warning
+- 新增 API：`GET /api/departments/stats` 返回各科室候诊统计
+
+---
+
 ## 2026-06-17 18:00 - 课程设计要求完善
 
 根据课程设计要求完善系统功能。

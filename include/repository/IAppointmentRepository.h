@@ -3,8 +3,16 @@
 #include "repository/IRepository.h"
 #include "model/Appointment.h"
 #include <vector>
+#include <string>
 
 namespace hospital {
+
+/// 科室候诊统计
+struct DeptStat {
+    std::string department;           ///< 科室名称
+    int waiting_count = 0;            ///< 候诊人数
+    int estimated_wait_minutes = 0;   ///< 预计等待时间（分钟）
+};
 
 /// 挂号仓储接口
 class IAppointmentRepository : public IRepository<Appointment> {
@@ -22,6 +30,9 @@ public:
 
     /// 获取指定医生当天的下一个排队号（按医生按日重置）
     virtual int getNextQueueNumber(int64_t doctor_id) = 0;
+
+    /// 统计各科室候诊人数与预计等待时间
+    virtual std::vector<DeptStat> countWaitingByDepartment() = 0;
 };
 
 } // namespace hospital

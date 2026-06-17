@@ -12,7 +12,7 @@ std::optional<Doctor> MySQLDoctorRepository::findById(int64_t id) {
     auto conn = pool_->getConnection();
 
     std::ostringstream sql;
-    sql << "SELECT id, name, department, title, max_patients, current_patients "
+    sql << "SELECT id, name, department, title, work_start, work_end, max_patients, current_patients "
         << "FROM doctors WHERE id = " << id;
 
     if (mysql_query(conn.get(), sql.str().c_str()) != 0) {
@@ -37,7 +37,7 @@ std::optional<Doctor> MySQLDoctorRepository::findById(int64_t id) {
 std::vector<Doctor> MySQLDoctorRepository::findAll() {
     auto conn = pool_->getConnection();
 
-    const char* sql = "SELECT id, name, department, title, max_patients, current_patients FROM doctors";
+    const char* sql = "SELECT id, name, department, title, work_start, work_end, max_patients, current_patients FROM doctors";
 
     if (mysql_query(conn.get(), sql) != 0) {
         throw DatabaseException(std::string("查询所有医生失败: ") + mysql_error(conn.get()));
@@ -64,12 +64,16 @@ bool MySQLDoctorRepository::save(Doctor& entity) {
     std::string escaped_name = escape(conn, entity.name);
     std::string escaped_dept = escape(conn, entity.department);
     std::string escaped_title = escape(conn, entity.title);
+    std::string escaped_start = escape(conn, entity.work_start);
+    std::string escaped_end = escape(conn, entity.work_end);
 
     std::ostringstream sql;
-    sql << "INSERT INTO doctors (name, department, title, max_patients, current_patients) VALUES ('"
+    sql << "INSERT INTO doctors (name, department, title, work_start, work_end, max_patients, current_patients) VALUES ('"
         << escaped_name << "', '"
         << escaped_dept << "', '"
-        << escaped_title << "', "
+        << escaped_title << "', '"
+        << escaped_start << "', '"
+        << escaped_end << "', "
         << entity.max_patients << ", "
         << entity.current_patients << ")";
 
@@ -87,12 +91,16 @@ bool MySQLDoctorRepository::update(const Doctor& entity) {
     std::string escaped_name = escape(conn, entity.name);
     std::string escaped_dept = escape(conn, entity.department);
     std::string escaped_title = escape(conn, entity.title);
+    std::string escaped_start = escape(conn, entity.work_start);
+    std::string escaped_end = escape(conn, entity.work_end);
 
     std::ostringstream sql;
     sql << "UPDATE doctors SET "
         << "name = '"            << escaped_name   << "', "
         << "department = '"      << escaped_dept   << "', "
         << "title = '"           << escaped_title  << "', "
+        << "work_start = '"      << escaped_start  << "', "
+        << "work_end = '"        << escaped_end    << "', "
         << "max_patients = "     << entity.max_patients     << ", "
         << "current_patients = " << entity.current_patients << " "
         << "WHERE id = "         << entity.id;
@@ -122,7 +130,7 @@ std::vector<Doctor> MySQLDoctorRepository::findByDepartment(std::string_view dep
 
     std::string escaped = escape(conn, department);
     std::ostringstream sql;
-    sql << "SELECT id, name, department, title, max_patients, current_patients "
+    sql << "SELECT id, name, department, title, work_start, work_end, max_patients, current_patients "
         << "FROM doctors WHERE department = '" << escaped << "'";
 
     if (mysql_query(conn.get(), sql.str().c_str()) != 0) {
@@ -149,7 +157,7 @@ std::optional<Doctor> MySQLDoctorRepository::findLeastLoaded(std::string_view de
 
     std::string escaped = escape(conn, department);
     std::ostringstream sql;
-    sql << "SELECT id, name, department, title, max_patients, current_patients "
+    sql << "SELECT id, name, department, title, work_start, work_end, max_patients, current_patients "
         << "FROM doctors WHERE department = '" << escaped << "' "
         << "ORDER BY current_patients ASC LIMIT 1";
 
@@ -178,8 +186,10 @@ Doctor MySQLDoctorRepository::parseRow(MYSQL_ROW row) {
     d.name             = row[1] ? row[1] : "";
     d.department       = row[2] ? row[2] : "";
     d.title            = row[3] ? row[3] : "";
-    d.max_patients     = row[4] ? std::stoi(row[4]) : 0;
-    d.current_patients = row[5] ? std::stoi(row[5]) : 0;
+    d.work_start       = row[4] ? row[4] : "08:00";
+    d.work_end         = row[5] ? row[5] : "17:00";
+    d.max_patients     = row[6] ? std::stoi(row[6]) : 0;
+    d.current_patients = row[7] ? std::stoi(row[7]) : 0;
     return d;
 }
 

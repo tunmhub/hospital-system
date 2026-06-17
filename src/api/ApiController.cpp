@@ -112,6 +112,12 @@ void ApiController::registerRoutes(httplib::Server& server) {
             handleSettleAppointment(req, res);
         });
 
+    // ---- 科室统计 ----
+    server.Get("/api/departments/stats",
+        [this](const httplib::Request& req, httplib::Response& res) {
+            handleDepartmentStats(req, res);
+        });
+
     std::cout << "[API] 路由注册完成:" << std::endl;
     std::cout << "[API]   POST /api/patients              - 注册患者" << std::endl;
     std::cout << "[API]   GET  /api/patients               - 患者列表/搜索" << std::endl;
@@ -126,6 +132,7 @@ void ApiController::registerRoutes(httplib::Server& server) {
     std::cout << "[API]   POST /api/appointments/auto      - 自动分流挂号" << std::endl;
     std::cout << "[API]   POST /api/doctors/:id/call_next  - 呼叫下一位" << std::endl;
     std::cout << "[API]   GET  /api/appointments/:id/wait_time - 预估等待时间" << std::endl;
+    std::cout << "[API]   GET  /api/departments/stats      - 科室候诊统计" << std::endl;
 }
 
 // ============================================================
@@ -143,11 +150,12 @@ void ApiController::handleCreatePatient(const httplib::Request& req, httplib::Re
         }
 
         Patient patient;
-        patient.name    = body["name"].get<std::string>();
-        patient.phone   = body["phone"].get<std::string>();
-        patient.id_card = body.value("id_card", "");
-        patient.age     = body.value("age", 0);
-        patient.gender  = body.value("gender", "");
+        patient.name              = body["name"].get<std::string>();
+        patient.medical_record_no = body.value("medical_record_no", "");
+        patient.phone             = body["phone"].get<std::string>();
+        patient.id_card           = body.value("id_card", "");
+        patient.age               = body.value("age", 0);
+        patient.gender            = body.value("gender", "");
 
         if (!patientRepo_->save(patient)) {
             setErrorResponse(res, 500, "患者创建失败");
@@ -155,13 +163,14 @@ void ApiController::handleCreatePatient(const httplib::Request& req, httplib::Re
         }
 
         json result = {
-            {"id",         patient.id},
-            {"name",       patient.name},
-            {"phone",      patient.phone},
-            {"id_card",    patient.id_card},
-            {"age",        patient.age},
-            {"gender",     patient.gender},
-            {"created_at", patient.created_at}
+            {"id",                patient.id},
+            {"name",              patient.name},
+            {"medical_record_no", patient.medical_record_no},
+            {"phone",             patient.phone},
+            {"id_card",           patient.id_card},
+            {"age",               patient.age},
+            {"gender",            patient.gender},
+            {"created_at",        patient.created_at}
         };
         setJsonResponse(res, 201, result.dump());
 
@@ -189,13 +198,14 @@ void ApiController::handleGetPatient(const httplib::Request& req, httplib::Respo
         }
 
         json result = {
-            {"id",         patient->id},
-            {"name",       patient->name},
-            {"phone",      patient->phone},
-            {"id_card",    patient->id_card},
-            {"age",        patient->age},
-            {"gender",     patient->gender},
-            {"created_at", patient->created_at}
+            {"id",                patient->id},
+            {"name",              patient->name},
+            {"medical_record_no", patient->medical_record_no},
+            {"phone",             patient->phone},
+            {"id_card",           patient->id_card},
+            {"age",               patient->age},
+            {"gender",            patient->gender},
+            {"created_at",        patient->created_at}
         };
         setJsonResponse(res, 200, result.dump());
 
@@ -211,11 +221,12 @@ void ApiController::handleListPatients(const httplib::Request& /*req*/, httplib:
         json arr = json::array();
         for (const auto& p : patients) {
             arr.push_back({
-                {"id",         p.id},
-                {"name",       p.name},
-                {"phone",      p.phone},
-                {"age",        p.age},
-                {"gender",     p.gender}
+                {"id",                p.id},
+                {"name",              p.name},
+                {"medical_record_no", p.medical_record_no},
+                {"phone",             p.phone},
+                {"age",               p.age},
+                {"gender",            p.gender}
             });
         }
         setJsonResponse(res, 200, arr.dump());
@@ -238,12 +249,13 @@ void ApiController::handleSearchPatients(const httplib::Request& req, httplib::R
         json arr = json::array();
         for (const auto& p : patients) {
             arr.push_back({
-                {"id",         p.id},
-                {"name",       p.name},
-                {"phone",      p.phone},
-                {"id_card",    p.id_card},
-                {"age",        p.age},
-                {"gender",     p.gender}
+                {"id",                p.id},
+                {"name",              p.name},
+                {"medical_record_no", p.medical_record_no},
+                {"phone",             p.phone},
+                {"id_card",           p.id_card},
+                {"age",               p.age},
+                {"gender",            p.gender}
             });
         }
         setJsonResponse(res, 200, arr.dump());
@@ -301,6 +313,8 @@ void ApiController::handleListDoctors(const httplib::Request& /*req*/, httplib::
                 {"name",             doc.name},
                 {"department",       doc.department},
                 {"title",            doc.title},
+                {"work_start",       doc.work_start},
+                {"work_end",         doc.work_end},
                 {"max_patients",     doc.max_patients},
                 {"current_patients", doc.current_patients}
             });
@@ -640,6 +654,29 @@ void ApiController::setJsonResponse(httplib::Response& res, int status, const st
 void ApiController::setErrorResponse(httplib::Response& res, int status, const std::string& message) {
     json err = {{"error", message}};
     setJsonResponse(res, status, err.dump());
+}
+
+// ============================================================
+// 科室统计接口
+// ============================================================
+
+void ApiController::handleDepartmentStats(const httplib::Request& /*req*/, httplib::Response& res) {
+    try {
+        auto stats = appointmentRepo_->countWaitingByDepartment();
+
+        json arr = json::array();
+        for (const auto& stat : stats) {
+            arr.push_back({
+                {"department",             stat.department},
+                {"waiting_count",          stat.waiting_count},
+                {"estimated_wait_minutes", stat.estimated_wait_minutes}
+            });
+        }
+        setJsonResponse(res, 200, arr.dump());
+
+    } catch (const std::exception& e) {
+        setErrorResponse(res, 500, std::string("服务器内部错误: ") + e.what());
+    }
 }
 
 } // namespace hospital

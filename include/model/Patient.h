@@ -48,6 +48,7 @@ inline double getInsuranceReimbursementRate(InsuranceType type) {
 struct Patient {
     int64_t id = 0;              ///< 患者 ID（数据库自增主键）
     std::string name;            ///< 姓名
+    std::string medical_record_no;  ///< 病历号（如 MR20260001）
     std::string phone;           ///< 手机号
     std::string id_card;         ///< 身份证号
     int age = 0;                 ///< 年龄

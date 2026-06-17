@@ -55,6 +55,9 @@ private:
     // ---- 结算相关 ----
     void handleSettleAppointment(const httplib::Request& req, httplib::Response& res);
 
+    // ---- 科室统计 ----
+    void handleDepartmentStats(const httplib::Request& req, httplib::Response& res);
+
     // ---- 工具方法 ----
     /// 设置 JSON 响应头并写入 body
     static void setJsonResponse(httplib::Response& res, int status, const std::string& json);

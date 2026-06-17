@@ -704,4 +704,39 @@ Priority MySQLAppointmentRepository::dbToPriority(const char* s) {
     return Priority::Normal;
 }
 
+std::vector<DeptStat> MySQLAppointmentRepository::countWaitingByDepartment() {
+    auto conn = pool_->getConnection();
+
+    // 按科室统计候诊人数，每个患者按 10 分钟预估等待时间
+    const char* sql = "SELECT d.department, COUNT(*) AS waiting_count, "
+                      "COUNT(*) * 10 AS estimated_wait_minutes "
+                      "FROM appointments a "
+                      "JOIN doctors d ON a.doctor_id = d.id "
+                      "WHERE a.status = 'waiting' "
+                      "GROUP BY d.department "
+                      "ORDER BY waiting_count DESC";
+
+    if (mysql_query(conn.get(), sql) != 0) {
+        throw DatabaseException(std::string("统计科室候诊人数失败: ") + mysql_error(conn.get()));
+    }
+
+    MYSQL_RES* result = mysql_store_result(conn.get());
+    if (!result) {
+        throw DatabaseException(std::string("获取结果集失败: ") + mysql_error(conn.get()));
+    }
+
+    std::vector<DeptStat> stats;
+    MYSQL_ROW row;
+    while ((row = mysql_fetch_row(result))) {
+        DeptStat stat;
+        stat.department = row[0] ? row[0] : "";
+        stat.waiting_count = row[1] ? std::stoi(row[1]) : 0;
+        stat.estimated_wait_minutes = row[2] ? std::stoi(row[2]) : 0;
+        stats.push_back(stat);
+    }
+
+    mysql_free_result(result);
+    return stats;
+}
+
 } // namespace hospital
