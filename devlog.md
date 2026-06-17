@@ -1,5 +1,50 @@
 # 开发日志
 
+## 2026-06-17 17:00 - P3: 前端工程化
+
+完成 P3 阶段所有前端工程化任务。
+
+### 修复内容
+
+**14. TypeScript 类型定义**
+- 新增 `web/src/types/index.ts`，定义 Patient、Doctor、Appointment、WaitTimeResponse、MakeAppointmentRequest 等类型
+- `doctor/index.vue`、`screen/index.vue`、`patient/index.vue` 均已替换 `any` 为具体类型
+
+**15. 请求拦截器增加静默模式**
+- `request.ts` 扩展 AxiosRequestConfig 类型，添加 `silent` 属性
+- 响应拦截器检查 `error.config?.silent`，静默模式下不弹出错误提示
+- `doctor/index.vue` 和 `screen/index.vue` 的轮询请求设置 `{ silent: true }`
+
+**16. 明确 baseURL**
+- `request.ts` 设置 `baseURL: '/api'`
+- 所有前端组件的 API 调用路径移除 `/api` 前缀
+
+**17. 患者注册先查后建**
+- 后端：`IPatientRepository` 新增 `searchByName(keyword)` 方法
+- 后端：`MySQLPatientRepository` 使用 `LIKE` 模糊查询，限制 10 条
+- 后端：`ApiController` 新增 `handleSearchPatients`，注册到 `/api/patients?search=xxx`
+- 前端：`patient/index.vue` 输入姓名时实时搜索，显示搜索结果下拉列表
+- 前端：新增手机号/身份证输入框，找到已有患者时弹窗提示选择或新建
+
+### 修改的文件
+**后端：**
+- `include/repository/IPatientRepository.h` — 新增 searchByName 接口
+- `src/repository/mysql/MySQLPatientRepository.h/.cpp` — 实现 searchByName
+- `src/repository/memory/MemoryPatientRepository.h/.cpp` — 实现 searchByName
+- `src/api/ApiController.h/.cpp` — 新增 handleSearchPatients
+
+**前端：**
+- `web/src/types/index.ts` — 新增类型定义
+- `web/src/utils/request.ts` — 设置 baseURL，添加 silent 支持
+- `web/src/views/doctor/index.vue` — 类型替换，轮询静默
+- `web/src/views/screen/index.vue` — 类型替换，轮询静默
+- `web/src/views/patient/index.vue` — 先查后建逻辑
+
+### 验证结果
+- 后端编译通过，0 error / 0 warning
+
+---
+
 ## 2026-06-17 16:30 - P2: 业务与状态机完善
 
 完成 P2 阶段所有业务与状态机完善任务。

@@ -289,9 +289,12 @@ item.wait_minutes = data.wait_minutes
 
 ---
 
-## 第四阶段：P3 前端工程化
+## 第四阶段：P3 前端工程化 ✅ 已完成
 
-### 14. TypeScript 类型定义
+> **完成时间**：2026-06-17
+> **验证状态**：编译通过
+
+### 14. TypeScript 类型定义 ✅
 
 新增 `web/src/types/index.ts`：
 
@@ -303,9 +306,13 @@ export interface Appointment { id: number; patient_id: number; patient_name?: st
 
 所有 `any` 替换为具体类型。
 
+**实现**：
+- 新增 `web/src/types/index.ts`，定义 Patient、Doctor、Appointment、WaitTimeResponse 等类型
+- `doctor/index.vue`、`screen/index.vue`、`patient/index.vue` 均已替换 `any` 为具体类型
+
 ---
 
-### 15. 请求拦截器增加静默模式
+### 15. 请求拦截器增加静默模式 ✅
 
 ```ts
 api.interceptors.response.use(
@@ -321,9 +328,14 @@ api.interceptors.response.use(
 
 轮询请求设置 `silent: true`。
 
+**实现**：
+- `request.ts` 扩展 AxiosRequestConfig 类型，添加 `silent` 属性
+- 响应拦截器检查 `error.config?.silent`，静默模式下不弹出错误提示
+- `doctor/index.vue` 和 `screen/index.vue` 的轮询请求设置 `{ silent: true }`
+
 ---
 
-### 16. 明确 `baseURL`
+### 16. 明确 `baseURL` ✅
 
 ```ts
 const api = axios.create({
@@ -332,9 +344,13 @@ const api = axios.create({
 })
 ```
 
+**实现**：
+- `request.ts` 设置 `baseURL: '/api'`
+- 所有前端组件的 API 调用路径移除 `/api` 前缀（如 `/api/doctors` → `/doctors`）
+
 ---
 
-### 17. 患者注册先查后建
+### 17. 患者注册先查后建 ✅
 
 修改 `patient/index.vue`：
 1. 输入姓名后先调用 `GET /api/patients?search=xxx` 查询。
@@ -342,6 +358,15 @@ const api = axios.create({
 3. 手机号/身份证改为输入框，不再随机生成。
 
 后端新增 `GET /api/patients?search=xxx` 接口。
+
+**实现**：
+- 后端：`IPatientRepository` 新增 `searchByName(keyword)` 方法
+- 后端：`MySQLPatientRepository` 使用 `LIKE` 模糊查询，限制 10 条
+- 后端：`MemoryPatientRepository` 同步实现
+- 后端：`ApiController` 新增 `handleSearchPatients`，注册到 `/api/patients?search=xxx`
+- 前端：`patient/index.vue` 输入姓名时实时搜索，显示搜索结果下拉列表
+- 前端：新增手机号/身份证输入框，新患者需填写
+- 前端：找到已有患者时弹窗提示选择或新建
 
 ---
 

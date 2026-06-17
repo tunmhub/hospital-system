@@ -18,6 +18,7 @@ public:
 
     std::optional<Patient> findByPhone(std::string_view phone) override;
     std::optional<Patient> findByIdCard(std::string_view id_card) override;
+    std::vector<Patient> searchByName(std::string_view keyword) override;
 
 private:
     std::unordered_map<int64_t, Patient> data_;   ///< id → Patient

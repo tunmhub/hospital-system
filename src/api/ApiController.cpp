@@ -41,9 +41,14 @@ void ApiController::registerRoutes(httplib::Server& server) {
             handleCreatePatient(req, res);
         });
 
+    // 搜索接口（带 query 参数 ?search=xxx）放在 /api/patients/:id 之前
     server.Get("/api/patients",
         [this](const httplib::Request& req, httplib::Response& res) {
-            handleListPatients(req, res);
+            if (req.has_param("search")) {
+                handleSearchPatients(req, res);
+            } else {
+                handleListPatients(req, res);
+            }
         });
 
     server.Get(R"(/api/patients/(\d+))",
@@ -200,6 +205,34 @@ void ApiController::handleListPatients(const httplib::Request& /*req*/, httplib:
                 {"id",         p.id},
                 {"name",       p.name},
                 {"phone",      p.phone},
+                {"age",        p.age},
+                {"gender",     p.gender}
+            });
+        }
+        setJsonResponse(res, 200, arr.dump());
+
+    } catch (const std::exception& e) {
+        setErrorResponse(res, 500, std::string("服务器内部错误: ") + e.what());
+    }
+}
+
+void ApiController::handleSearchPatients(const httplib::Request& req, httplib::Response& res) {
+    try {
+        std::string keyword = req.get_param_value("search");
+        if (keyword.empty()) {
+            setErrorResponse(res, 400, "搜索关键词不能为空");
+            return;
+        }
+
+        auto patients = patientRepo_->searchByName(keyword);
+
+        json arr = json::array();
+        for (const auto& p : patients) {
+            arr.push_back({
+                {"id",         p.id},
+                {"name",       p.name},
+                {"phone",      p.phone},
+                {"id_card",    p.id_card},
                 {"age",        p.age},
                 {"gender",     p.gender}
             });

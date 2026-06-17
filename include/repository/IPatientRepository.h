@@ -4,6 +4,7 @@
 #include "model/Patient.h"
 #include <optional>
 #include <string>
+#include <vector>
 
 namespace hospital {
 
@@ -17,6 +18,9 @@ public:
 
     /// 根据身份证号查找患者
     virtual std::optional<Patient> findByIdCard(std::string_view id_card) = 0;
+
+    /// 根据姓名模糊搜索患者
+    virtual std::vector<Patient> searchByName(std::string_view keyword) = 0;
 };
 
 } // namespace hospital

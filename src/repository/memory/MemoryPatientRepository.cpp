@@ -63,4 +63,17 @@ std::optional<Patient> MemoryPatientRepository::findByIdCard(std::string_view id
     return std::nullopt;
 }
 
+std::vector<Patient> MemoryPatientRepository::searchByName(std::string_view keyword) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    std::vector<Patient> result;
+    std::string kw(keyword);
+    for (const auto& [id, patient] : data_) {
+        if (patient.name.find(kw) != std::string::npos) {
+            result.push_back(patient);
+            if (result.size() >= 10) break;
+        }
+    }
+    return result;
+}
+
 } // namespace hospital

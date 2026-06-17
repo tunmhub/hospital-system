@@ -71,15 +71,21 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
 import request from '@/utils/request'
+import type { Doctor, Appointment, WaitTimeResponse } from '@/types'
 
-const doctors = ref<any[]>([])
+// 扩展 Appointment 添加等待时间
+interface QueueItem extends Appointment {
+  wait_minutes?: number | null
+}
+
+const doctors = ref<Doctor[]>([])
 const selectedDoctor = ref('')
-const queue = ref<any[]>([])
-let timer: any = null
+const queue = ref<QueueItem[]>([])
+let timer: ReturnType<typeof setInterval> | null = null
 
 const loadDoctors = async () => {
   try {
-    doctors.value = await request.get('/api/doctors')
+    doctors.value = await request.get('/doctors', { silent: true })
   } catch (e) {}
 }
 
@@ -89,10 +95,10 @@ const refreshQueue = async () => {
     return
   }
   try {
-    const allQueue: any[] = await request.get(`/api/doctors/${selectedDoctor.value}/queue`)
+    const allQueue: Appointment[] = await request.get(`/doctors/${selectedDoctor.value}/queue`, { silent: true })
 
     // 只过滤出目前状态在等待的
-    const waiting = allQueue.filter(item => item.status === 'waiting')
+    const waiting: QueueItem[] = allQueue.filter(item => item.status === 'waiting')
 
     // 强制排序：急诊(0) > 加急(1) > 普通(2)
     const priorityOrder: Record<string, number> = { 'emergency': 0, 'urgent': 1, 'normal': 2 }
@@ -100,13 +106,13 @@ const refreshQueue = async () => {
       const pA = priorityOrder[String(a.priority).toLowerCase()] ?? 2
       const pB = priorityOrder[String(b.priority).toLowerCase()] ?? 2
       if (pA !== pB) return pA - pB
-      return parseInt(a.queue_number) - parseInt(b.queue_number)
+      return a.queue_number - b.queue_number
     })
 
     // 调用后端 wait_time 接口获取等待时间
     for (const item of waiting) {
       try {
-        const waitData: any = await request.get(`/api/appointments/${item.id}/wait_time`)
+        const waitData: WaitTimeResponse = await request.get(`/appointments/${item.id}/wait_time`, { silent: true })
         item.wait_minutes = waitData.wait_minutes
       } catch (e) {
         item.wait_minutes = null

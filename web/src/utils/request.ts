@@ -1,9 +1,15 @@
-import axios from 'axios'
+import axios, { type AxiosRequestConfig } from 'axios'
 import Swal from 'sweetalert2'
 
+// 扩展 AxiosRequestConfig，支持 silent 配置
+declare module 'axios' {
+  interface AxiosRequestConfig {
+    silent?: boolean
+  }
+}
+
 const request = axios.create({
-  // 开发环境下使用 vite 代理，生产环境下使用相对路径
-  baseURL: import.meta.env.DEV ? '' : '',
+  baseURL: '/api',
   timeout: 10000,
   headers: {
     'Content-Type': 'application/json'
@@ -29,15 +35,17 @@ request.interceptors.response.use(
   },
   (error) => {
     const errorMsg = error.response?.data?.error || error.message || '网络请求异常'
-    
-    // 不要对自动刷新产生的无感错误弹出（如果有需要在API中配置静默标识也可，这里先全拦截）
-    Swal.fire({
-      icon: 'error',
-      title: '系统提示',
-      text: errorMsg,
-      confirmButtonColor: '#ef4444'
-    })
-    
+
+    // 静默模式下不弹出错误提示（用于轮询等场景）
+    if (!error.config?.silent) {
+      Swal.fire({
+        icon: 'error',
+        title: '系统提示',
+        text: errorMsg,
+        confirmButtonColor: '#ef4444'
+      })
+    }
+
     return Promise.reject(error)
   }
 )

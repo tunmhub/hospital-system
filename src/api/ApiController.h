@@ -35,6 +35,7 @@ private:
     void handleCreatePatient(const httplib::Request& req, httplib::Response& res);
     void handleGetPatient(const httplib::Request& req, httplib::Response& res);
     void handleListPatients(const httplib::Request& req, httplib::Response& res);
+    void handleSearchPatients(const httplib::Request& req, httplib::Response& res);
 
     // ---- 医生相关 ----
     void handleListDoctors(const httplib::Request& req, httplib::Response& res);

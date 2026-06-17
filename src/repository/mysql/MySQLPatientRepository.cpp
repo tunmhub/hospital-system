@@ -180,6 +180,34 @@ std::optional<Patient> MySQLPatientRepository::findByIdCard(std::string_view id_
     return patient;
 }
 
+std::vector<Patient> MySQLPatientRepository::searchByName(std::string_view keyword) {
+    auto conn = pool_->getConnection();
+
+    std::string escaped = escape(conn, keyword);
+    std::ostringstream sql;
+    sql << "SELECT id, name, phone, id_card, age, gender, "
+        << "DATE_FORMAT(created_at, '%Y-%m-%d %H:%i:%s') AS created_at "
+        << "FROM patients WHERE name LIKE '%" << escaped << "%' LIMIT 10";
+
+    if (mysql_query(conn.get(), sql.str().c_str()) != 0) {
+        throw DatabaseException(std::string("搜索患者失败: ") + mysql_error(conn.get()));
+    }
+
+    MYSQL_RES* result = mysql_store_result(conn.get());
+    if (!result) {
+        throw DatabaseException(std::string("获取结果集失败: ") + mysql_error(conn.get()));
+    }
+
+    std::vector<Patient> patients;
+    MYSQL_ROW row;
+    while ((row = mysql_fetch_row(result))) {
+        patients.push_back(parseRow(row));
+    }
+
+    mysql_free_result(result);
+    return patients;
+}
+
 Patient MySQLPatientRepository::parseRow(MYSQL_ROW row) {
     Patient p;
     p.id         = row[0] ? std::stoll(row[0]) : 0;

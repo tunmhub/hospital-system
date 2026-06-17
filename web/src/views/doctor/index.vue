@@ -82,10 +82,11 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import request from '@/utils/request'
 import Swal from 'sweetalert2'
+import type { Doctor, Appointment } from '@/types'
 
-const doctors = ref<any[]>([])
+const doctors = ref<Doctor[]>([])
 const waitingCounts = ref<Record<number, number>>({})
-let timer: any = null
+let timer: ReturnType<typeof setInterval> | null = null
 
 const totalWaiting = computed(() => {
   return Object.values(waitingCounts.value).reduce((sum, count) => sum + count, 0)
@@ -93,7 +94,7 @@ const totalWaiting = computed(() => {
 
 const loadDoctors = async () => {
   try {
-    doctors.value = await request.get('/api/doctors')
+    doctors.value = await request.get('/doctors', { silent: true })
     // 加载每个医生的真正等待人数
     await loadWaitingCounts()
   } catch (e) {
@@ -105,7 +106,7 @@ const loadWaitingCounts = async () => {
   const counts: Record<number, number> = {}
   for (const doc of doctors.value) {
     try {
-      const queue: any[] = await request.get(`/api/doctors/${doc.id}/queue`)
+      const queue: Appointment[] = await request.get(`/doctors/${doc.id}/queue`, { silent: true })
       counts[doc.id] = queue.filter(item => item.status === 'waiting').length
     } catch (e) {
       counts[doc.id] = 0
@@ -114,14 +115,14 @@ const loadWaitingCounts = async () => {
   waitingCounts.value = counts
 }
 
-const callNext = async (doc: any) => {
+const callNext = async (doc: Doctor) => {
   try {
-    const result: any = await request.post(`/api/doctors/${doc.id}/call_next`)
+    const result: Appointment = await request.post(`/doctors/${doc.id}/call_next`)
     Swal.fire({
       title: '<strong>大厅呼叫成功</strong>',
       html: `<div style="font-size: 1.5rem; margin: 1rem 0;">
                请下一位患者进入诊室就诊
-               <div style="color: #10b981; font-weight: bold; font-size: 2.2rem; margin-top: 1rem;">${result.patient_name || '患者'}</div>
+               <div style="color: #10b981; font-weight: bold; font-size: 2.2rem; margin-top: 1rem;">${(result as any).patient_name || '患者'}</div>
              </div>`,
       icon: 'info',
       timer: 8000,
