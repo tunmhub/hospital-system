@@ -1,4 +1,5 @@
 #include <iostream>
+#include <fstream>
 #include <memory>
 #include <cstdlib>
 
@@ -168,6 +169,19 @@ int main() {
             std::cout << "[WARN] 静态文件目录 ./public 不存在，前端页面无法访问" << std::endl;
             std::cout << "[WARN] 请确保在项目根目录运行，或创建 public/ 目录的符号链接" << std::endl;
         }
+
+        // SPA fallback：非 API 请求且文件不存在时，返回 index.html（支持 Vue Router History 模式）
+        server.set_error_handler([](const httplib::Request& req, httplib::Response& res) {
+            if (res.status == 404 && req.path.find("/api/") == std::string::npos) {
+                std::ifstream file("./public/index.html");
+                if (file.is_open()) {
+                    std::string content((std::istreambuf_iterator<char>(file)),
+                                         std::istreambuf_iterator<char>());
+                    res.set_content(content, "text/html");
+                    res.status = 200;
+                }
+            }
+        });
 
         int port = std::getenv("SERVER_PORT") ? std::atoi(std::getenv("SERVER_PORT")) : 8080;
         std::cout << std::endl;

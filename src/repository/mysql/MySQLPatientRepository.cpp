@@ -3,6 +3,8 @@
 
 #include <iostream>
 #include <sstream>
+#include <cstring>
+#include <iomanip>
 
 namespace hospital {
 
@@ -65,8 +67,25 @@ std::vector<Patient> MySQLPatientRepository::findAll() {
 bool MySQLPatientRepository::save(Patient& entity) {
     auto conn = pool_->getConnection();
 
+    // 验证必填字段
+    if (entity.name.empty()) {
+        throw ValidationException("患者姓名不能为空");
+    }
+    if (entity.phone.empty()) {
+        throw ValidationException("手机号不能为空");
+    }
+    if (entity.id_card.empty()) {
+        throw ValidationException("身份证号不能为空");
+    }
+    if (entity.age <= 0) {
+        throw ValidationException("年龄必须大于0");
+    }
+    if (entity.gender.empty()) {
+        throw ValidationException("性别不能为空");
+    }
+
+    // 先插入记录，病历号暂时为空
     std::string escaped_name  = escape(conn, entity.name);
-    std::string escaped_mr_no = escape(conn, entity.medical_record_no);
     std::string escaped_phone = escape(conn, entity.phone);
     std::string escaped_idcard = escape(conn, entity.id_card);
     std::string escaped_gender = escape(conn, entity.gender);
@@ -74,8 +93,7 @@ bool MySQLPatientRepository::save(Patient& entity) {
 
     std::ostringstream sql;
     sql << "INSERT INTO patients (name, medical_record_no, phone, id_card, age, gender, insurance_type) VALUES ('"
-        << escaped_name << "', '"
-        << escaped_mr_no << "', '"
+        << escaped_name << "', '', '"
         << escaped_phone << "', '"
         << escaped_idcard << "', "
         << entity.age << ", '"
@@ -88,6 +106,21 @@ bool MySQLPatientRepository::save(Patient& entity) {
 
     // 获取自增 ID
     entity.id = static_cast<int64_t>(mysql_insert_id(conn.get()));
+
+    // 用 ID 生成病历号并更新
+    std::ostringstream mr_no;
+    mr_no << "MR" << std::setw(8) << std::setfill('0') << entity.id;
+    entity.medical_record_no = mr_no.str();
+
+    std::string escaped_mr_no = escape(conn, entity.medical_record_no);
+    std::ostringstream update_sql;
+    update_sql << "UPDATE patients SET medical_record_no = '" << escaped_mr_no << "' WHERE id = " << entity.id;
+
+    if (mysql_query(conn.get(), update_sql.str().c_str()) != 0) {
+        // 更新失败不影响主流程，只记录日志
+        std::cerr << "[WARN] 更新病历号失败: " << mysql_error(conn.get()) << std::endl;
+    }
+
     return true;
 }
 

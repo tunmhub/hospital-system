@@ -1,11 +1,20 @@
+// ============================================================
+// 医院挂号系统 - TypeScript 类型定义
+// ============================================================
+
+// 医保类型
+export type InsuranceType = 'urban_worker' | 'urban_resident' | 'rural_resident' | 'self'
+
 // 患者类型
 export interface Patient {
   id: number
   name: string
+  medical_record_no?: string
   phone: string
   id_card?: string
   age?: number
   gender?: string
+  insurance_type?: InsuranceType
   created_at?: string
 }
 
@@ -15,6 +24,8 @@ export interface Doctor {
   name: string
   department: string
   title?: string
+  work_start?: string
+  work_end?: string
   max_patients: number
   current_patients: number
 }
@@ -36,6 +47,10 @@ export interface Appointment {
   status: AppointmentStatus
   priority: Priority
   queue_number: number
+  registration_fee?: number
+  insurance_fee?: number
+  self_fee?: number
+  settled?: boolean
   created_at?: string
 }
 
@@ -53,7 +68,31 @@ export interface MakeAppointmentRequest {
   priority?: Priority
 }
 
+// 结算响应
+export interface SettlementResponse {
+  id: number
+  patient_id: number
+  patient_name: string
+  insurance_type: InsuranceType
+  registration_fee: number
+  insurance_fee: number
+  self_fee: number
+  settled: boolean
+}
+
+// 科室统计
+export interface DepartmentStat {
+  department: string
+  waiting_count: number
+  estimated_wait_minutes: number
+}
+
 // API 错误响应
 export interface ApiError {
   error: string
+}
+
+// API 成功消息
+export interface ApiMessage {
+  message: string
 }

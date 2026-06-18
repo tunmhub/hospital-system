@@ -13,12 +13,13 @@
         <h1 class="fw-bold m-0" style="letter-spacing: 2px;">
           <i class="bi bi-display text-primary me-2"></i> 门诊排队大厅
         </h1>
-        <select 
-          class="form-select w-auto bg-dark text-white fs-5 border-secondary py-2" 
-          v-model="selectedDoctor" 
-          @change="refreshQueue">
+        <select
+          class="form-select w-auto bg-dark text-white fs-5 border-secondary py-2"
+          v-model="selectedDoctor"
+          @change="refreshQueue"
+        >
           <option value="">-- 请选择要投屏的医生 --</option>
-          <option v-for="doc in doctors" :key="doc.id" :value="doc.id">
+          <option v-for="doc in doctorStore.doctors" :key="doc.id" :value="doc.id">
             {{ doc.name }} ({{ doc.department }})
           </option>
         </select>
@@ -38,26 +39,33 @@
         </div>
 
         <div v-else class="row gx-4 gy-4">
-          <div class="col-md-6 col-lg-4" v-for="(item, index) in queue" :key="item.appointment_id || item.id">
+          <div class="col-md-6 col-lg-4" v-for="item in queue" :key="item.id">
             <!-- 卡片按优先级定色 -->
-            <div class="card h-100 border-0 shadow-lg queue-card" 
-                 :class="getCardClass(item.priority)">
+            <div
+              class="card h-100 border-0 shadow-lg queue-card"
+              :class="getCardClass(item.priority)"
+            >
               <div class="card-body p-4 position-relative overflow-hidden">
                 <!-- 遮罩层制造反光效果 -->
                 <div class="card-glare"></div>
-                
+
                 <div class="d-flex justify-content-between align-items-start mb-3">
                   <span class="fs-1 fw-bold display-4 queue-number">#{{ item.queue_number }}</span>
                   <span class="badge px-3 py-2 fs-6 rounded-pill" :class="getBadgeClass(item.priority)">
                     {{ getPriorityText(item.priority) }}
                   </span>
                 </div>
-                
-                <h2 class="fw-bold mb-3 name-text">{{ item.patient_name || `患者${item.patient_id}` }}</h2>
-                
+
+                <h2 class="fw-bold mb-3 name-text">
+                  {{ item.patient_name || `患者${item.patient_id}` }}
+                </h2>
+
                 <div class="d-flex align-items-center mt-auto">
                   <i class="bi bi-hourglass-split me-2 opacity-75"></i>
-                  <span class="opacity-75 fs-5">预计等待: <strong>{{ item.wait_minutes !== null ? item.wait_minutes + ' 分钟' : '计算中...' }}</strong></span>
+                  <span class="opacity-75 fs-5">
+                    预计等待:
+                    <strong>{{ item.wait_minutes !== null ? item.wait_minutes + ' 分钟' : '计算中...' }}</strong>
+                  </span>
                 </div>
               </div>
             </div>
@@ -70,38 +78,35 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
-import request from '@/utils/request'
-import type { Doctor, Appointment, WaitTimeResponse } from '@/types'
+import { useDoctorStore } from '@/stores/doctor'
+import { appointmentApi } from '@/api/appointment'
+import type { Appointment, WaitTimeResponse } from '@/types'
+
+const doctorStore = useDoctorStore()
 
 // 扩展 Appointment 添加等待时间
 interface QueueItem extends Appointment {
   wait_minutes?: number | null
 }
 
-const doctors = ref<Doctor[]>([])
 const selectedDoctor = ref('')
 const queue = ref<QueueItem[]>([])
 let timer: ReturnType<typeof setInterval> | null = null
-
-const loadDoctors = async () => {
-  try {
-    doctors.value = await request.get('/doctors', { silent: true })
-  } catch (e) {}
-}
 
 const refreshQueue = async () => {
   if (!selectedDoctor.value) {
     queue.value = []
     return
   }
+
   try {
-    const allQueue: Appointment[] = await request.get(`/doctors/${selectedDoctor.value}/queue`, { silent: true })
+    const allQueue = await appointmentApi.getByDoctor(Number(selectedDoctor.value))
 
     // 只过滤出目前状态在等待的
-    const waiting: QueueItem[] = allQueue.filter(item => item.status === 'waiting')
+    const waiting: QueueItem[] = allQueue.filter((item) => item.status === 'waiting')
 
     // 强制排序：急诊(0) > 加急(1) > 普通(2)
-    const priorityOrder: Record<string, number> = { 'emergency': 0, 'urgent': 1, 'normal': 2 }
+    const priorityOrder: Record<string, number> = { emergency: 0, urgent: 1, normal: 2 }
     waiting.sort((a, b) => {
       const pA = priorityOrder[String(a.priority).toLowerCase()] ?? 2
       const pB = priorityOrder[String(b.priority).toLowerCase()] ?? 2
@@ -112,7 +117,7 @@ const refreshQueue = async () => {
     // 调用后端 wait_time 接口获取等待时间
     for (const item of waiting) {
       try {
-        const waitData: WaitTimeResponse = await request.get(`/appointments/${item.id}/wait_time`, { silent: true })
+        const waitData: WaitTimeResponse = await appointmentApi.getWaitTime(item.id)
         item.wait_minutes = waitData.wait_minutes
       } catch (e) {
         item.wait_minutes = null
@@ -120,7 +125,9 @@ const refreshQueue = async () => {
     }
 
     queue.value = waiting
-  } catch (e) {}
+  } catch (e) {
+    // 错误已由 request.ts 处理
+  }
 }
 
 const getPriorityText = (priority: string) => {
@@ -139,37 +146,47 @@ const getCardClass = (priority: string) => {
 
 const getBadgeClass = (priority: string) => {
   const p = String(priority).toLowerCase()
-  // 在本身就是有色的卡片上画徽章，需要反差色的字
   if (p === 'emergency') return 'bg-white text-danger'
   if (p === 'urgent') return 'bg-dark text-warning'
   return 'bg-dark text-white'
 }
 
 onMounted(() => {
-  // 注意，此界面的 class 位于 index 最顶层，覆盖了 bootstrap 原有的背景
-  document.body.style.background = '#212529'; // 屏幕主色应为深色以免刺眼
-
-  loadDoctors()
+  document.body.style.background = '#212529'
+  doctorStore.loadDoctors()
   timer = window.setInterval(() => {
     if (selectedDoctor.value) refreshQueue()
   }, 10000)
 })
 
 onUnmounted(() => {
-  document.body.style.background = '';
+  document.body.style.background = ''
   if (timer) clearInterval(timer)
 })
 </script>
 
 <style scoped>
-/* 抵消掉 App.vue 由于不显示 Navbar 而导致的边距计算 */
-.screen-container { margin-top: 0px; padding-top: 0px; }
+.screen-container {
+  margin-top: 0px;
+  padding-top: 0px;
+}
 
-.pulse-anim { animation: pulse 2s infinite; }
-@keyframes pulse { 
-  0% { opacity: 1; transform: scale(1); } 
-  50% { opacity: 0.8; transform: scale(0.98); } 
-  100% { opacity: 1; transform: scale(1); } 
+.pulse-anim {
+  animation: pulse 2s infinite;
+}
+@keyframes pulse {
+  0% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.8;
+    transform: scale(0.98);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 .queue-card {
@@ -177,9 +194,10 @@ onUnmounted(() => {
   transform: translateY(0);
   transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
-.queue-card:hover { transform: translateY(-10px); }
+.queue-card:hover {
+  transform: translateY(-10px);
+}
 
-/* 卡片高光特效 */
 .card-glare {
   position: absolute;
   top: -50%;
@@ -187,21 +205,27 @@ onUnmounted(() => {
   width: 200%;
   height: 200%;
   background: linear-gradient(
-    to bottom right, 
-    rgba(255,255,255,0) 0%,
-    rgba(255,255,255,0.03) 40%,
-    rgba(255,255,255,0.15) 50%,
-    rgba(255,255,255,0) 60%,
-    rgba(255,255,255,0) 100%
+    to bottom right,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.03) 40%,
+    rgba(255, 255, 255, 0.15) 50%,
+    rgba(255, 255, 255, 0) 60%,
+    rgba(255, 255, 255, 0) 100%
   );
   transform: rotate(30deg);
   pointer-events: none;
 }
 
-.emergency-card { animation: emergencyBg 3s infinite alternate; }
+.emergency-card {
+  animation: emergencyBg 3s infinite alternate;
+}
 @keyframes emergencyBg {
-  0% { background-color: #dc3545; }
-  100% { background-color: #b02a37; }
+  0% {
+    background-color: #dc3545;
+  }
+  100% {
+    background-color: #b02a37;
+  }
 }
 
 .name-text {

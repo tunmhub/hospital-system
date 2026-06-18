@@ -8,7 +8,7 @@ declare module 'axios' {
   }
 }
 
-const request = axios.create({
+const axiosInstance = axios.create({
   baseURL: '/api',
   timeout: 10000,
   headers: {
@@ -17,7 +17,7 @@ const request = axios.create({
 })
 
 // 请求拦截器
-request.interceptors.request.use(
+axiosInstance.interceptors.request.use(
   (config) => {
     // 可以在这里添加 token 等头信息
     return config
@@ -28,7 +28,7 @@ request.interceptors.request.use(
 )
 
 // 响应拦截器
-request.interceptors.response.use(
+axiosInstance.interceptors.response.use(
   (response) => {
     // 业务正常时的提取
     return response.data
@@ -49,5 +49,21 @@ request.interceptors.response.use(
     return Promise.reject(error)
   }
 )
+
+// 自定义 request 对象，正确处理类型
+const request = {
+  get<T = any>(url: string, config?: AxiosRequestConfig): Promise<T> {
+    return axiosInstance.get(url, config) as any
+  },
+  post<T = any>(url: string, data?: any, config?: AxiosRequestConfig): Promise<T> {
+    return axiosInstance.post(url, data, config) as any
+  },
+  put<T = any>(url: string, data?: any, config?: AxiosRequestConfig): Promise<T> {
+    return axiosInstance.put(url, data, config) as any
+  },
+  delete<T = any>(url: string, config?: AxiosRequestConfig): Promise<T> {
+    return axiosInstance.delete(url, config) as any
+  }
+}
 
 export default request
