@@ -1,5 +1,72 @@
 # 开发日志
 
+## 2026-06-18 - 前端重构与患者注册完善
+
+完成前端架构重构，新增 API 服务层和状态管理，完善患者注册流程。
+
+### 完成内容
+
+**1. 前端架构重构**
+- 新增 API 服务层：`api/patient.ts`、`api/doctor.ts`、`api/appointment.ts`
+- 新增 Pinia 状态管理：`stores/patient.ts`、`stores/doctor.ts`、`stores/appointment.ts`
+- 完善 TypeScript 类型定义：新增 `InsuranceType`、`SettlementResponse`、`DepartmentStat` 等类型
+- 修复 `request.ts` 类型问题，正确处理 Axios 响应拦截器返回值
+
+**2. 患者页面功能完善**
+- 新增**退号**功能：取消等待中的挂号
+- 新增**医保结算**功能：对已完成的挂号进行结算
+- 新增**历史就诊记录**：查看患者所有挂号记录
+- 挂号成功后显示详细信息和操作按钮
+
+**3. 医生页面功能完善**
+- 新增**完成就诊**按钮：标记就诊中的患者为已完成
+- 新增**队列预览**：显示当前排队患者
+- 优化 UI 布局
+
+**4. 患者注册流程完善**
+- 所有字段改为必填：姓名、手机号、身份证号、年龄、性别、医保类型
+- 性别改为下拉选择：男 / 女
+- 医保类型改为下拉选择：城镇职工(80%)、城镇居民(60%)、新农合(60%)、自费(0%)
+- 自动生成病历号：`MR` + 8位数字
+- 后端添加必填字段验证
+
+**5. Bug 修复**
+- 修复 `appointments` 表缺少字段问题：添加 `registration_fee`、`insurance_fee`、`self_fee`、`settled`
+- 修复患者注册时病历号/身份证号唯一索引冲突问题
+- 修复 SPA 路由 404 问题：添加后端 fallback
+
+### 修改的文件
+
+**新增文件（6个）：**
+- `web/src/api/patient.ts` — 患者 API 服务
+- `web/src/api/doctor.ts` — 医生 API 服务
+- `web/src/api/appointment.ts` — 挂号 API 服务
+- `web/src/stores/patient.ts` — 患者状态管理
+- `web/src/stores/doctor.ts` — 医生状态管理
+- `web/src/stores/appointment.ts` — 挂号状态管理
+
+**修改文件（9个）：**
+- `web/src/types/index.ts` — 完善类型定义
+- `web/src/utils/request.ts` — 修复类型问题
+- `web/src/views/patient/index.vue` — 重构患者页面
+- `web/src/views/doctor/index.vue` — 重构医生页面
+- `web/src/views/screen/index.vue` — 使用新 Store
+- `src/main.cpp` — 添加 SPA fallback
+- `src/repository/mysql/MySQLPatientRepository.cpp` — 患者注册验证
+- `USAGE.md` — 更新使用说明
+
+### 验证结果
+- 前端编译通过：`npm run build` 成功
+- 后端编译通过：`make` 成功
+- 功能测试：
+  - 患者注册：所有字段必填，下拉选择 ✅
+  - 退号功能：取消等待中的挂号 ✅
+  - 医保结算：显示报销金额 ✅
+  - 历史记录：查看患者所有挂号 ✅
+  - 完成就诊：医生页面标记完成 ✅
+
+---
+
 ## 2026-06-17 20:00 - 补充课程设计基本要求功能
 
 根据 Phase1_Setup.md 课程设计要求，补充缺失的 3 项基本功能。
