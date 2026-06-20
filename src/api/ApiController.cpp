@@ -29,11 +29,13 @@ ApiController::ApiController(
     std::shared_ptr<IDoctorRepository> doctorRepo,
     std::shared_ptr<IAppointmentRepository> appointmentRepo,
     std::shared_ptr<IAppointmentService> appointmentService,
+    std::shared_ptr<IQueueManagementService> queueService,
     std::shared_ptr<IInsuranceService> insuranceService)
     : patientRepo_(std::move(patientRepo))
     , doctorRepo_(std::move(doctorRepo))
     , appointmentRepo_(std::move(appointmentRepo))
     , appointmentService_(std::move(appointmentService))
+    , queueService_(std::move(queueService))
     , insuranceService_(std::move(insuranceService)) {}
 
 void ApiController::registerRoutes(httplib::Server& server) {
@@ -517,7 +519,7 @@ void ApiController::handleCallNextPatient(const httplib::Request& req, httplib::
             setErrorResponse(res, 400, "无效的医生 ID");
             return;
         }
-        auto result = appointmentService_->callNextPatient(*doctorIdOpt);
+        auto result = queueService_->callNextPatient(*doctorIdOpt);
 
         if (!result.ok()) {
             setErrorResponse(res, 400, result.errorMessage());
@@ -578,7 +580,7 @@ void ApiController::handleEstimateWaitTime(const httplib::Request& req, httplib:
             setErrorResponse(res, 400, "无效的挂号 ID");
             return;
         }
-        auto result = appointmentService_->estimateWaitTime(*appointmentIdOpt);
+        auto result = queueService_->estimateWaitTime(*appointmentIdOpt);
 
         if (!result.ok()) {
             setErrorResponse(res, 400, result.errorMessage());

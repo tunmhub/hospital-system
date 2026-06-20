@@ -54,6 +54,8 @@ set(SOURCES
     src/repository/mysql/MySQLDoctorRepository.cpp
     src/repository/mysql/MySQLAppointmentRepository.cpp
     src/service/AppointmentService.cpp
+    src/service/QueueManagementService.cpp
+    src/service/AutoRoutingService.cpp
     src/service/InsuranceService.cpp
     src/api/ApiController.cpp
     src/algorithm/PriorityQueueStrategy.cpp

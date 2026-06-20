@@ -4,6 +4,7 @@
 #include "repository/IDoctorRepository.h"
 #include "repository/IAppointmentRepository.h"
 #include "service/IAppointmentService.h"
+#include "service/IQueueManagementService.h"
 #include "service/IInsuranceService.h"
 
 #include <httplib.h>
@@ -26,6 +27,7 @@ public:
         std::shared_ptr<IDoctorRepository> doctorRepo,
         std::shared_ptr<IAppointmentRepository> appointmentRepo,
         std::shared_ptr<IAppointmentService> appointmentService,
+        std::shared_ptr<IQueueManagementService> queueService,
         std::shared_ptr<IInsuranceService> insuranceService = nullptr
     );
 
@@ -68,6 +70,7 @@ private:
     std::shared_ptr<IDoctorRepository> doctorRepo_;
     std::shared_ptr<IAppointmentRepository> appointmentRepo_;
     std::shared_ptr<IAppointmentService> appointmentService_;
+    std::shared_ptr<IQueueManagementService> queueService_;
     std::shared_ptr<IInsuranceService> insuranceService_;
 };
 

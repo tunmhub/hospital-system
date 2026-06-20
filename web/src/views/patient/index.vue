@@ -423,6 +423,27 @@ const createNewPatient = async () => {
     return
   }
 
+  // 格式校验
+  const phoneStr = phone.value.trim()
+  if (!/^1\d{10}$/.test(phoneStr)) {
+    Swal.fire({
+      icon: 'warning',
+      title: '手机号格式不正确',
+      text: `手机号必须为 11 位数字且以 1 开头，当前输入: "${phoneStr}"（${phoneStr.length} 位）`
+    })
+    return
+  }
+
+  const idStr = idCard.value.trim()
+  if (!/^\d{17}[\dXx]$/.test(idStr)) {
+    Swal.fire({
+      icon: 'warning',
+      title: '身份证号格式不正确',
+      text: `身份证号必须为 18 位（前 17 位数字 + 末位数字或 X），当前输入: "${idStr}"（${idStr.length} 位）`
+    })
+    return
+  }
+
   try {
     const patient = await patientStore.createPatient({
       name: patientName.value,

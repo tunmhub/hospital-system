@@ -14,7 +14,8 @@
 ### 前端
 - **框架**：Vue 3 + TypeScript
 - **构建**：Vite
-- **UI**：Bootstrap 5 + Bootstrap Icons
+- **UI**：Bootstrap 5 + Bootstrap Icons + Element Plus
+- **CSS**：Tailwind CSS v4
 - **HTTP 客户端**：Axios
 - **弹窗**：SweetAlert2
 
@@ -81,10 +82,16 @@ hospital-system/
 │   └── algorithm/             # 队列算法
 ├── src/                        # 源文件
 │   ├── api/                   # API 实现
+│   ├── di/                    # DI 容器
 │   ├── repository/            # 仓储实现
 │   │   ├── memory/           # 内存实现（测试用）
 │   │   └── mysql/            # MySQL 实现
 │   ├── service/               # 服务实现
+│   │   ├── AppointmentService  # 挂号核心 CRUD
+│   │   ├── QueueManagementService # 排队管理（叫号/等待时间）
+│   │   ├── AutoRoutingService  # 自动分流（贪心算法）
+│   │   ├── InsuranceService    # 医保结算
+│   │   └── DoctorLockManager   # 医生级锁管理
 │   └── main.cpp               # 入口
 ├── web/                        # 前端项目
 │   ├── src/
@@ -122,7 +129,9 @@ hospital-system/
 | POST | `/api/appointments/auto` | 自动分流挂号 |
 | POST | `/api/appointments/:id/cancel` | 取消挂号 |
 | POST | `/api/appointments/:id/complete` | 完成就诊 |
+| POST | `/api/appointments/:id/settle` | 医保结算 |
 | GET | `/api/appointments/:id/wait_time` | 预估等待时间 |
+| GET | `/api/departments/stats` | 科室候诊统计 |
 
 ## 核心功能
 

@@ -1,5 +1,135 @@
 # 开发日志
 
+## 2026-06-20 - 后端架构重构 + 前端 UI 现代化
+
+完成后端三层架构重构（DI 容器增强、Service 解耦拆分）和前端 UI 现代化升级（Tailwind CSS + Element Plus），并修复患者注册校验缺陷。
+
+### Phase 1 & 2：DI 容器增强与策略解耦
+
+**1. Container 单例缓存**
+- 新增 `bindSingleton<Interface, Impl>()` — 类型绑定单例，首次 resolve 创建，后续复用
+- 新增 `bindSingletonFactory<Interface>(factory)` — 工厂函数单例，线程安全（`std::mutex` + `shared_ptr` 缓存）
+- 解决每次 `resolve()` 都创建新实例的性能浪费
+
+**2. 修复工厂 Lambda 悬垂引用**
+- `main.cpp` 中 `Container` 改为 `shared_ptr<Container>` 管理生命周期
+- Service 工厂 lambda 从捕获 `&container` 改为捕获 `container`（shared_ptr 值拷贝）
+- 消除 Container 销毁后 lambda 悬垂引用的风险
+
+**3. IQueueStrategy 接口注入**
+- `AppointmentService` 构造函数新增 `std::shared_ptr<IQueueStrategy>` 参数
+- `callNextPatient()` 和 `estimateWaitTime()` 中的硬编码 `PriorityQueueStrategy` 替换为注入的 `queueStrategy_`
+- `main.cpp` 中注册 `IQueueStrategy → PriorityQueueStrategy` 单例
+- 支持运行时替换队列策略，便于测试和扩展
+
+### Phase 3：AppointmentService SRP 拆分
+
+**4. DoctorLockManager 共享锁工具**
+- 新建 `src/service/DoctorLockManager.h` — 医生级细粒度锁管理器
+- 多个 Service 共享同一实例，确保对同一医生的操作互斥
+- 通过 DI 容器以单例注入
+
+**5. QueueManagementService（排队管理）**
+- 新建 `include/service/IQueueManagementService.h` — 接口
+- 新建 `src/service/QueueManagementService.h/.cpp` — 实现
+- 从 AppointmentService 提取 `callNextPatient()` 和 `estimateWaitTime()`
+- 注入 `IAppointmentRepository`、`IDoctorRepository`、`IQueueStrategy`、`DoctorLockManager`
+
+**6. AutoRoutingService（自动分流）**
+- 新建 `include/service/IAutoRoutingService.h` — 接口（`selectDoctor(department)` 返回 doctor_id）
+- 新建 `src/service/AutoRoutingService.h/.cpp` — 实现（贪心最小堆算法）
+- 从 AppointmentService 提取 `autoRouteAppointment()` 的医生选择逻辑
+- 无循环依赖：AutoRoutingService 只返回 doctor_id，挂号锁定由 AppointmentService 完成
+
+**7. AppointmentService 瘦身**
+- 保留核心 CRUD：`makeAppointment`、`cancelAppointment`、`completeAppointment`
+- `autoRouteAppointment()` 委托给 `IAutoRoutingService::selectDoctor()` + 自己锁定+挂号
+- `callNextPatient()` / `estimateWaitTime()` 委托给 `IQueueManagementService`（延迟注入）
+- 内部锁管理替换为 `DoctorLockManager`
+
+**8. ApiController 更新**
+- 构造函数新增 `IQueueManagementService` 参数
+- `handleCallNextPatient` 改调 `queueService_->callNextPatient()`
+- `handleEstimateWaitTime` 改调 `queueService_->estimateWaitTime()`
+- 所有 HTTP API 路由和 JSON 返回格式完全不变
+
+**9. DI 注册拓扑**
+```
+DoctorLockManager → IQueueStrategy
+  → IAutoRoutingService → IQueueManagementService
+    → IAppointmentService → IInsuranceService
+```
+
+### 前端 UI 现代化
+
+**10. Tailwind CSS + Element Plus 集成**
+- 安装 `tailwindcss`、`@tailwindcss/vite`、`element-plus`
+- `vite.config.ts` 添加 `tailwindcss()` 插件
+- `main.ts` 全局注册 Element Plus，引入 `tailwind.css` 入口文件
+
+**11. 医生工作台 UI 重写**
+- 仅重写 `doctor/index.vue` 的 `<template>` 和 `<style>`，`<script setup>` 业务逻辑零改动
+- 统计卡片：`el-card` + 图标方块 + 大号数字
+- 医生卡片：渐变头像、`el-progress` 负载进度条（绿/黄/红）、`el-tag` 队列标签
+- 叫号按钮：渐变绿色 + 麦克风图标
+- 完成就诊按钮：渐变橙色 + 勾选图标
+- 状态指示灯：绿/红发光圆点 + `animate-pulse` 脉冲动画
+- 毛玻璃粘性导航栏、卡片悬停阴影、按钮缩放反馈
+
+### 患者注册校验修复
+
+**12. 后端格式校验**
+- `MySQLPatientRepository::save()` 新增：
+  - 手机号：必须 11 位纯数字
+  - 身份证号：必须 18 位（前 17 位数字 + 末位数字或 X/x）
+  - 年龄：不能超过 150 岁
+- 校验失败抛出 `ValidationException`，返回具体原因（如"手机号必须为 11 位数字，当前为 3 位"）
+
+**13. 前端即时校验**
+- `patient/index.vue` 的 `createNewPatient()` 在 API 调用前用正则校验
+- 手机号：`/^1\d{10}$/`（11 位，以 1 开头）
+- 身份证号：`/^\d{17}[\dXx]$/`（18 位）
+- 校验失败弹窗显示具体错误原因
+
+### 修改的文件
+
+**后端新增（7 个）：**
+- `src/service/DoctorLockManager.h` — 共享锁管理器
+- `include/service/IQueueManagementService.h` — 排队管理接口
+- `src/service/QueueManagementService.h/.cpp` — 排队管理实现
+- `include/service/IAutoRoutingService.h` — 自动分流接口
+- `src/service/AutoRoutingService.h/.cpp` — 自动分流实现
+
+**后端修改（7 个）：**
+- `src/di/Container.h` — 新增 bindSingleton / bindSingletonFactory
+- `src/main.cpp` — shared_ptr Container + 新 Service 注册 + IQueueStrategy 注册
+- `src/service/AppointmentService.h` — 新依赖注入 + 委托方法
+- `src/service/AppointmentService.cpp` — 瘦身 + 委托 + DoctorLockManager
+- `src/api/ApiController.h/.cpp` — 新增 IQueueManagementService 注入
+- `src/repository/mysql/MySQLPatientRepository.cpp` — 手机号/身份证号格式校验
+- `CMakeLists.txt` — 新增 QueueManagementService.cpp、AutoRoutingService.cpp
+
+**前端新增（2 个）：**
+- `web/src/assets/tailwind.css` — Tailwind 入口文件
+- `web/package.json` — 新增 tailwindcss、@tailwindcss/vite、element-plus
+
+**前端修改（4 个）：**
+- `web/vite.config.ts` — 添加 tailwindcss 插件
+- `web/src/main.ts` — 全局注册 Element Plus
+- `web/src/views/doctor/index.vue` — UI 全面重写（template + style）
+- `web/src/views/patient/index.vue` — 新增手机号/身份证号即时校验
+
+### 验证结果
+- 后端 clean build：0 error / 0 warning ✅
+- 前端 `npm run build`：成功 ✅
+- 前端 `npm run dev`：启动成功 ✅
+- 患者注册校验测试：
+  - 手机号 `"123"` → "手机号必须为 11 位数字，当前为 3 位" ✅
+  - 身份证号 `"12345"` → "身份证号必须为 18 位，当前为 5 位" ✅
+  - 手机号 `"1380013800a"` → "手机号只能包含数字，当前包含非法字符: 'a'" ✅
+
+---
+
 ## 2026-06-18 - 前端重构与患者注册完善
 
 完成前端架构重构，新增 API 服务层和状态管理，完善患者注册流程。

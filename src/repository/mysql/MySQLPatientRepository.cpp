@@ -84,6 +84,35 @@ bool MySQLPatientRepository::save(Patient& entity) {
         throw ValidationException("性别不能为空");
     }
 
+    // 验证手机号格式：必须为 11 位纯数字
+    if (entity.phone.length() != 11) {
+        throw ValidationException("手机号必须为 11 位数字，当前为 " + std::to_string(entity.phone.length()) + " 位");
+    }
+    for (char c : entity.phone) {
+        if (!std::isdigit(static_cast<unsigned char>(c))) {
+            throw ValidationException("手机号只能包含数字，当前包含非法字符: '" + std::string(1, c) + "'");
+        }
+    }
+
+    // 验证身份证号格式：必须为 18 位（最后一位可以是数字或 X/x）
+    if (entity.id_card.length() != 18) {
+        throw ValidationException("身份证号必须为 18 位，当前为 " + std::to_string(entity.id_card.length()) + " 位");
+    }
+    for (size_t i = 0; i < 17; ++i) {
+        if (!std::isdigit(static_cast<unsigned char>(entity.id_card[i]))) {
+            throw ValidationException("身份证号前 17 位必须为数字，第 " + std::to_string(i + 1) + " 位包含非法字符");
+        }
+    }
+    char last = entity.id_card[17];
+    if (!std::isdigit(static_cast<unsigned char>(last)) && last != 'X' && last != 'x') {
+        throw ValidationException("身份证号第 18 位必须为数字或 X");
+    }
+
+    // 验证年龄合理范围
+    if (entity.age > 150) {
+        throw ValidationException("年龄不能超过 150 岁");
+    }
+
     // 先插入记录，病历号暂时为空
     std::string escaped_name  = escape(conn, entity.name);
     std::string escaped_phone = escape(conn, entity.phone);

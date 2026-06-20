@@ -1,32 +1,34 @@
 #pragma once
 
 #include "service/IAppointmentService.h"
+#include "service/IQueueManagementService.h"
 #include "repository/IPatientRepository.h"
 #include "repository/IDoctorRepository.h"
 #include "repository/IAppointmentRepository.h"
-#include "algorithm/PriorityQueueStrategy.h"
+#include "service/IAutoRoutingService.h"
+#include "service/DoctorLockManager.h"
 
 #include <memory>
-#include <mutex>
-#include <unordered_map>
 
 namespace hospital {
 
-/// 挂号业务服务实现
+/// 挂号业务服务实现（精简后）
 ///
-/// 职责：
+/// 职责（核心挂号 CRUD）：
 /// 1. 校验患者和医生是否存在
 /// 2. 检查医生接诊上限
 /// 3. 原子操作：医生 current_patients + 1，生成挂号记录
-/// 4. 自动分流（贪心最小堆）
-/// 5. 优先队列叫号
-/// 6. 等待时间预估
+///
+/// 分流调度委托给 IAutoRoutingService，
+/// 叫号/等待时间委托给 IQueueManagementService（由 ApiController 直接调用）。
 class AppointmentService : public IAppointmentService {
 public:
     AppointmentService(
         std::shared_ptr<IPatientRepository> patientRepo,
         std::shared_ptr<IDoctorRepository> doctorRepo,
-        std::shared_ptr<IAppointmentRepository> appointmentRepo
+        std::shared_ptr<IAppointmentRepository> appointmentRepo,
+        std::shared_ptr<IAutoRoutingService> routingService,
+        std::shared_ptr<DoctorLockManager> lockManager
     );
 
     Result<Appointment> makeAppointment(
@@ -53,21 +55,22 @@ public:
 
     Result<int> estimateWaitTime(int64_t appointment_id) override;
 
+    /// 设置排队管理服务（延迟注入，打破循环依赖）
+    void setQueueManagementService(std::shared_ptr<IQueueManagementService> queueManager) {
+        queueManager_ = std::move(queueManager);
+    }
+
 private:
     /// 内部挂号逻辑（不加锁，由调用方负责锁）
     Result<Appointment> makeAppointmentInternal(
         int64_t patient_id, int64_t doctor_id, Priority priority);
 
-    /// 获取医生对应的锁（按需创建）
-    std::mutex& getDoctorLock(int64_t doctor_id);
-
     std::shared_ptr<IPatientRepository> patientRepo_;
     std::shared_ptr<IDoctorRepository> doctorRepo_;
     std::shared_ptr<IAppointmentRepository> appointmentRepo_;
-
-    /// 医生级细粒度锁（替代全局 serviceMutex_）
-    std::mutex lockMapMutex_;
-    std::unordered_map<int64_t, std::unique_ptr<std::mutex>> doctorLocks_;
+    std::shared_ptr<IAutoRoutingService> routingService_;
+    std::shared_ptr<DoctorLockManager> lockManager_;
+    std::shared_ptr<IQueueManagementService> queueManager_;  ///< 延迟注入
 };
 
 } // namespace hospital

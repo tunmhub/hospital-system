@@ -16,6 +16,9 @@
 #include "repository/IDoctorRepository.h"
 #include "repository/IAppointmentRepository.h"
 #include "service/IAppointmentService.h"
+#include "service/IQueueManagementService.h"
+#include "service/IAutoRoutingService.h"
+#include "algorithm/IQueueStrategy.h"
 
 // MySQL 连接池
 #include "db/MySQLConnectionPool.h"
@@ -27,7 +30,13 @@
 
 // Service 实现
 #include "service/AppointmentService.h"
+#include "service/QueueManagementService.h"
+#include "service/AutoRoutingService.h"
 #include "service/InsuranceService.h"
+#include "service/DoctorLockManager.h"
+
+// 算法策略
+#include "algorithm/PriorityQueueStrategy.h"
 
 // API 控制器
 #include "api/ApiController.h"
@@ -41,34 +50,75 @@
 using namespace hospital;
 
 /// 注册所有依赖绑定
-void registerDependencies(Container& container, std::shared_ptr<MySQLConnectionPool> pool) {
-    // 连接池（单例）
-    container.bindInstance<MySQLConnectionPool>(pool);
+///
+/// 使用 shared_ptr<Container> 捕获，避免工厂 lambda 悬垂引用风险。
+/// 所有 Service 均注册为单例，保证全局唯一实例。
+///
+/// 依赖拓扑序：
+///   DoctorLockManager → IQueueStrategy
+///     → IAutoRoutingService → IQueueManagementService
+///       → IAppointmentService → IInsuranceService
+void registerDependencies(std::shared_ptr<Container> container, std::shared_ptr<MySQLConnectionPool> pool) {
+    // ---- 基础设施 ----
+    container->bindInstance<MySQLConnectionPool>(pool);
 
-    // Repository 层
-    container.bindFactory<IPatientRepository>([pool]() {
+    // 共享锁管理器（所有需要医生级锁的 Service 共享同一实例）
+    container->bindSingleton<DoctorLockManager, DoctorLockManager>();
+
+    // ---- Repository 层 ----
+    container->bindSingletonFactory<IPatientRepository>([pool]() {
         return std::make_shared<MySQLPatientRepository>(pool);
     });
-    container.bindFactory<IDoctorRepository>([pool]() {
+    container->bindSingletonFactory<IDoctorRepository>([pool]() {
         return std::make_shared<MySQLDoctorRepository>(pool);
     });
-    container.bindFactory<IAppointmentRepository>([pool]() {
+    container->bindSingletonFactory<IAppointmentRepository>([pool]() {
         return std::make_shared<MySQLAppointmentRepository>(pool);
     });
 
-    // Service 层：注入三个 Repository
-    container.bindFactory<IAppointmentService>([&container]() {
-        auto patientRepo     = container.resolve<IPatientRepository>();
-        auto doctorRepo      = container.resolve<IDoctorRepository>();
-        auto appointmentRepo = container.resolve<IAppointmentRepository>();
-        return std::make_shared<AppointmentService>(
-            patientRepo, doctorRepo, appointmentRepo);
+    // ---- 算法策略 ----
+    container->bindSingletonFactory<IQueueStrategy>([]() {
+        return std::make_shared<PriorityQueueStrategy>();
     });
 
-    // 医保结算服务
-    container.bindFactory<IInsuranceService>([&container]() {
-        auto patientRepo     = container.resolve<IPatientRepository>();
-        auto appointmentRepo = container.resolve<IAppointmentRepository>();
+    // ---- 自动分流服务（纯选医生逻辑，无循环依赖）----
+    container->bindSingletonFactory<IAutoRoutingService>([container]() {
+        auto doctorRepo      = container->resolve<IDoctorRepository>();
+        auto appointmentRepo = container->resolve<IAppointmentRepository>();
+        return std::make_shared<AutoRoutingService>(doctorRepo, appointmentRepo);
+    });
+
+    // ---- 排队管理服务 ----
+    container->bindSingletonFactory<IQueueManagementService>([container]() {
+        auto appointmentRepo = container->resolve<IAppointmentRepository>();
+        auto doctorRepo      = container->resolve<IDoctorRepository>();
+        auto queueStrategy   = container->resolve<IQueueStrategy>();
+        auto lockManager     = container->resolve<DoctorLockManager>();
+        return std::make_shared<QueueManagementService>(
+            appointmentRepo, doctorRepo, queueStrategy, lockManager);
+    });
+
+    // ---- 挂号核心服务 ----
+    container->bindSingletonFactory<IAppointmentService>([container]() {
+        auto patientRepo     = container->resolve<IPatientRepository>();
+        auto doctorRepo      = container->resolve<IDoctorRepository>();
+        auto appointmentRepo = container->resolve<IAppointmentRepository>();
+        auto routingService  = container->resolve<IAutoRoutingService>();
+        auto lockManager     = container->resolve<DoctorLockManager>();
+
+        auto svc = std::make_shared<AppointmentService>(
+            patientRepo, doctorRepo, appointmentRepo, routingService, lockManager);
+
+        // 延迟注入排队管理服务（打破 AppointmentService ↔ IQueueManagementService 循环依赖）
+        svc->setQueueManagementService(container->resolve<IQueueManagementService>());
+
+        return svc;
+    });
+
+    // ---- 医保结算服务 ----
+    container->bindSingletonFactory<IInsuranceService>([container]() {
+        auto patientRepo     = container->resolve<IPatientRepository>();
+        auto appointmentRepo = container->resolve<IAppointmentRepository>();
         return std::make_shared<InsuranceService>(
             patientRepo, appointmentRepo);
     });
@@ -102,29 +152,35 @@ int main() {
 
         auto pool = std::make_shared<MySQLConnectionPool>(config);
 
-        // ---- 初始化 DI 容器 ----
-        Container container;
+        // ---- 初始化 DI 容器（shared_ptr 管理生命周期，避免工厂 lambda 悬垂引用）----
+        auto container = std::make_shared<Container>();
         registerDependencies(container, pool);
 
         std::cout << "[INFO] 依赖注入容器初始化完成" << std::endl;
         std::cout << "[INFO]   - MySQLConnectionPool     -> " << pool->poolSize() << " 个连接" << std::endl;
-        std::cout << "[INFO]   - IPatientRepository       -> MySQLPatientRepository" << std::endl;
-        std::cout << "[INFO]   - IDoctorRepository        -> MySQLDoctorRepository" << std::endl;
-        std::cout << "[INFO]   - IAppointmentRepository   -> MySQLAppointmentRepository" << std::endl;
-        std::cout << "[INFO]   - IAppointmentService      -> AppointmentService" << std::endl;
+        std::cout << "[INFO]   - DoctorLockManager        -> DoctorLockManager (singleton)" << std::endl;
+        std::cout << "[INFO]   - IPatientRepository       -> MySQLPatientRepository (singleton)" << std::endl;
+        std::cout << "[INFO]   - IDoctorRepository        -> MySQLDoctorRepository (singleton)" << std::endl;
+        std::cout << "[INFO]   - IAppointmentRepository   -> MySQLAppointmentRepository (singleton)" << std::endl;
+        std::cout << "[INFO]   - IQueueStrategy           -> PriorityQueueStrategy (singleton)" << std::endl;
+        std::cout << "[INFO]   - IAutoRoutingService      -> AutoRoutingService (singleton)" << std::endl;
+        std::cout << "[INFO]   - IQueueManagementService  -> QueueManagementService (singleton)" << std::endl;
+        std::cout << "[INFO]   - IAppointmentService      -> AppointmentService (singleton)" << std::endl;
+        std::cout << "[INFO]   - IInsuranceService        -> InsuranceService (singleton)" << std::endl;
 
         // ---- 解析依赖 ----
-        auto patientRepo     = container.resolve<IPatientRepository>();
-        auto doctorRepo      = container.resolve<IDoctorRepository>();
-        auto appointmentRepo = container.resolve<IAppointmentRepository>();
-        auto appointmentSvc  = container.resolve<IAppointmentService>();
-        auto insuranceSvc    = container.resolve<IInsuranceService>();
+        auto patientRepo     = container->resolve<IPatientRepository>();
+        auto doctorRepo      = container->resolve<IDoctorRepository>();
+        auto appointmentRepo = container->resolve<IAppointmentRepository>();
+        auto appointmentSvc  = container->resolve<IAppointmentService>();
+        auto queueSvc        = container->resolve<IQueueManagementService>();
+        auto insuranceSvc    = container->resolve<IInsuranceService>();
 
         std::cout << "[INFO] 所有依赖解析成功" << std::endl;
 
         // ---- 初始化 API 控制器 ----
         ApiController apiController(
-            patientRepo, doctorRepo, appointmentRepo, appointmentSvc, insuranceSvc);
+            patientRepo, doctorRepo, appointmentRepo, appointmentSvc, queueSvc, insuranceSvc);
 
         // ---- 启动 HTTP 服务器 ----
         httplib::Server server;
