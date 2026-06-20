@@ -1,296 +1,411 @@
 <template>
-  <div class="container py-4">
-    <!-- 返回首页按钮 -->
-    <div class="mb-3">
-      <router-link to="/" class="btn btn-light">
-        <i class="bi bi-arrow-left"></i> 返回首页
-      </router-link>
+  <div class="patient-page min-h-screen bg-gray-50">
+    <!-- 顶部导航 -->
+    <div class="sticky top-0 z-50 bg-white/80 backdrop-blur-xl border-b border-gray-100 shadow-sm">
+      <div class="max-w-lg mx-auto px-4 py-3 flex items-center gap-3">
+        <router-link
+          to="/"
+          class="inline-flex items-center justify-center w-8 h-8 rounded-full hover:bg-gray-100 transition-colors text-gray-500"
+        >
+          <el-icon :size="18"><ArrowLeft /></el-icon>
+        </router-link>
+        <h1 class="text-base font-semibold text-gray-800 flex-1">挂号服务</h1>
+        <span class="inline-flex items-center gap-1 text-xs text-emerald-600 font-medium">
+          <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+          在线
+        </span>
+      </div>
     </div>
 
-    <!-- 患者信息卡片 -->
-    <div class="card shadow-sm border-0 mb-4">
-      <div class="card-header bg-primary text-white">
-        <h5 class="mb-0"><i class="bi bi-person-plus"></i> 患者终端 - 挂号</h5>
+    <div class="max-w-lg mx-auto px-4 py-5 space-y-4 pb-24">
+
+      <!-- ========== 患者查询/注册 ========== -->
+      <el-card shadow="never" class="!border-0 !rounded-2xl">
+        <template #header>
+          <div class="flex items-center gap-2 text-gray-800 font-semibold text-sm">
+            <span class="w-6 h-6 rounded-lg bg-blue-50 flex items-center justify-center">
+              <i class="bi bi-person text-blue-500 text-xs"></i>
+            </span>
+            患者信息
+          </div>
+        </template>
+
+        <!-- 姓名搜索 -->
+        <div class="flex gap-2 mb-3">
+          <el-input
+            v-model="patientName"
+            placeholder="输入患者姓名"
+            size="large"
+            class="flex-1"
+            clearable
+            @input="onSearchInput"
+            @keyup.enter="findOrCreatePatient"
+          >
+            <template #prefix>
+              <el-icon><Search /></el-icon>
+            </template>
+          </el-input>
+          <el-button
+            type="primary"
+            size="large"
+            class="!rounded-xl !px-5"
+            @click="findOrCreatePatient"
+          >
+            查询
+          </el-button>
+        </div>
+
+        <!-- 搜索结果 -->
+        <div v-if="patientStore.searchResults.length > 0" class="space-y-1.5 mb-3">
+          <div
+            v-for="p in patientStore.searchResults"
+            :key="p.id"
+            class="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-blue-50/60 hover:bg-blue-50 cursor-pointer transition-colors"
+            @click="selectExistingPatient(p)"
+          >
+            <div class="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
+              <i class="bi bi-person-check text-blue-500 text-sm"></i>
+            </div>
+            <div class="flex-1 min-w-0">
+              <div class="text-sm font-semibold text-gray-800 truncate">{{ p.name }}</div>
+              <div class="text-xs text-gray-400">{{ p.phone }}</div>
+            </div>
+            <span class="text-xs text-gray-300">#{{ p.id }}</span>
+          </div>
+        </div>
+
+        <!-- 患者信息表单（新注册或编辑） -->
+        <div class="space-y-3">
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="text-xs text-gray-400 font-medium mb-1 block">手机号 <span class="text-red-400">*</span></label>
+              <el-input v-model="phone" placeholder="11位手机号" size="large" class="!rounded-xl" />
+            </div>
+            <div>
+              <label class="text-xs text-gray-400 font-medium mb-1 block">身份证号 <span class="text-red-400">*</span></label>
+              <el-input v-model="idCard" placeholder="18位身份证号" size="large" class="!rounded-xl" />
+            </div>
+          </div>
+          <div class="grid grid-cols-3 gap-3">
+            <div>
+              <label class="text-xs text-gray-400 font-medium mb-1 block">年龄 <span class="text-red-400">*</span></label>
+              <el-input-number v-model="age" :min="1" :max="150" size="large" class="!w-full !rounded-xl" controls-position="right" />
+            </div>
+            <div>
+              <label class="text-xs text-gray-400 font-medium mb-1 block">性别 <span class="text-red-400">*</span></label>
+              <el-select v-model="gender" placeholder="选择" size="large" class="!w-full">
+                <el-option label="男" value="男" />
+                <el-option label="女" value="女" />
+              </el-select>
+            </div>
+            <div>
+              <label class="text-xs text-gray-400 font-medium mb-1 block">医保 <span class="text-red-400">*</span></label>
+              <el-select v-model="insuranceType" placeholder="选择" size="large" class="!w-full">
+                <el-option label="职工 (80%)" value="urban_worker" />
+                <el-option label="居民 (60%)" value="urban_resident" />
+                <el-option label="新农合 (60%)" value="rural_resident" />
+                <el-option label="自费" value="self" />
+              </el-select>
+            </div>
+          </div>
+        </div>
+      </el-card>
+
+      <!-- ========== 当前患者指示条 ========== -->
+      <div
+        v-if="patientStore.currentPatient"
+        class="flex items-center gap-3 px-4 py-3 rounded-2xl bg-gradient-to-r from-blue-500 to-indigo-500 text-white shadow-lg shadow-blue-500/20"
+      >
+        <div class="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center text-lg font-bold">
+          {{ patientStore.currentPatient.name.charAt(0) }}
+        </div>
+        <div class="flex-1 min-w-0">
+          <div class="font-semibold text-sm">{{ patientStore.currentPatient.name }}</div>
+          <div class="text-xs text-blue-100">
+            {{ patientStore.currentPatient.gender }} · {{ getInsuranceTypeText(patientStore.currentPatient.insurance_type || 'self') }}
+          </div>
+        </div>
+        <span class="text-xs bg-white/20 px-2 py-0.5 rounded-full">ID: {{ patientStore.currentPatient.id }}</span>
       </div>
-      <div class="card-body">
-        <!-- 患者查询/注册 -->
-        <h6 class="fw-bold mb-3"><i class="bi bi-person"></i> 患者信息</h6>
-        <div class="row mb-3">
-          <div class="col-8">
-            <input
-              type="text"
-              class="form-control"
-              v-model="patientName"
-              placeholder="患者姓名"
-              required
-              @input="onSearchInput"
-            />
+
+      <!-- ========== 挂号表单 ========== -->
+      <el-card shadow="never" class="!border-0 !rounded-2xl">
+        <template #header>
+          <div class="flex items-center gap-2 text-gray-800 font-semibold text-sm">
+            <span class="w-6 h-6 rounded-lg bg-emerald-50 flex items-center justify-center">
+              <i class="bi bi-calendar-plus text-emerald-500 text-xs"></i>
+            </span>
+            预约挂号
           </div>
-          <div class="col-4">
-            <button
-              type="button"
-              class="btn btn-outline-primary w-100"
-              @click="findOrCreatePatient"
+        </template>
+
+        <form @submit.prevent="submitAppointment" class="space-y-4">
+          <!-- 科室 -->
+          <div>
+            <label class="text-xs text-gray-400 font-medium mb-1.5 block">就诊科室</label>
+            <el-select
+              v-model="form.department"
+              placeholder="请选择就诊科室"
+              size="large"
+              class="!w-full"
             >
-              <i class="bi bi-search"></i> 查询/注册
-            </button>
-          </div>
-        </div>
-
-        <!-- 搜索结果下拉 -->
-        <div v-if="patientStore.searchResults.length > 0" class="mb-3">
-          <div class="list-group">
-            <button
-              v-for="p in patientStore.searchResults"
-              :key="p.id"
-              class="list-group-item list-group-item-action"
-              @click="selectExistingPatient(p)"
-            >
-              <i class="bi bi-person-check text-success me-2"></i>
-              <strong>{{ p.name }}</strong>
-              <span class="ms-2 text-muted">{{ p.phone }}</span>
-              <span class="badge bg-secondary ms-2">ID: {{ p.id }}</span>
-            </button>
-          </div>
-        </div>
-
-        <!-- 新患者信息 -->
-        <div class="row mb-3">
-          <div class="col-6">
-            <label class="form-label fw-semibold">手机号 <span class="text-danger">*</span></label>
-            <input
-              type="tel"
-              class="form-control"
-              v-model="phone"
-              placeholder="请输入手机号"
-              required
-            />
-          </div>
-          <div class="col-6">
-            <label class="form-label fw-semibold">身份证号 <span class="text-danger">*</span></label>
-            <input
-              type="text"
-              class="form-control"
-              v-model="idCard"
-              placeholder="请输入身份证号"
-              required
-            />
-          </div>
-        </div>
-        <div class="row mb-3">
-          <div class="col-4">
-            <label class="form-label fw-semibold">年龄 <span class="text-danger">*</span></label>
-            <input
-              type="number"
-              class="form-control"
-              v-model="age"
-              placeholder="请输入年龄"
-              min="1"
-              required
-            />
-          </div>
-          <div class="col-4">
-            <label class="form-label fw-semibold">性别 <span class="text-danger">*</span></label>
-            <select class="form-select" v-model="gender" required>
-              <option value="">请选择性别</option>
-              <option value="男">男</option>
-              <option value="女">女</option>
-            </select>
-          </div>
-          <div class="col-4">
-            <label class="form-label fw-semibold">医保类型 <span class="text-danger">*</span></label>
-            <select class="form-select" v-model="insuranceType" required>
-              <option value="">请选择医保类型</option>
-              <option value="urban_worker">城镇职工医保 (80%)</option>
-              <option value="urban_resident">城镇居民医保 (60%)</option>
-              <option value="rural_resident">新农合医保 (60%)</option>
-              <option value="self">自费 (0%)</option>
-            </select>
-          </div>
-        </div>
-
-        <!-- 当前选中患者 -->
-        <div v-if="patientStore.currentPatient" class="alert alert-info mb-3">
-          <i class="bi bi-person-check"></i> 患者:
-          <strong>{{ patientStore.currentPatient.name }}</strong>
-          <span class="ms-2 badge bg-primary">ID: {{ patientStore.currentPatient.id }}</span>
-          <span class="ms-2 badge bg-secondary">{{ patientStore.currentPatient.gender }}</span>
-          <span class="ms-2 badge bg-info">{{ getInsuranceTypeText(patientStore.currentPatient.insurance_type || 'self') }}</span>
-        </div>
-
-        <hr />
-
-        <!-- 挂号表单 -->
-        <form @submit.prevent="submitAppointment">
-          <div class="mb-3">
-            <label class="form-label fw-semibold">就诊科室</label>
-            <select class="form-select" v-model="form.department" required>
-              <option value="">请选择科室</option>
-              <option v-for="dept in departments" :key="dept" :value="dept">
-                {{ dept }}
-              </option>
-            </select>
-          </div>
-          <div class="mb-3">
-            <label class="form-label fw-semibold">指定医生（可选不指定，将触发自动分流）</label>
-            <select class="form-select" v-model="form.doctorId">
-              <option value="">自动分配 (负载最小优先)</option>
-              <option v-for="doc in filteredDoctors" :key="doc.id" :value="doc.id">
-                {{ doc.name }} ({{ doc.title || '医师' }})
-              </option>
-            </select>
-          </div>
-          <div class="mb-3">
-            <div class="form-check form-switch">
-              <input
-                class="form-check-input"
-                type="checkbox"
-                id="isUrgent"
-                v-model="form.isUrgent"
+              <el-option
+                v-for="dept in departments"
+                :key="dept"
+                :label="dept"
+                :value="dept"
               />
-              <label class="form-check-label fw-semibold" for="isUrgent">
-                <i class="bi bi-exclamation-triangle text-warning"></i> 加急就诊
-              </label>
+            </el-select>
+          </div>
+
+          <!-- 医生 -->
+          <div>
+            <label class="text-xs text-gray-400 font-medium mb-1.5 block">
+              指定医生
+              <span class="text-gray-300 font-normal">（不选则自动分配）</span>
+            </label>
+            <el-select
+              v-model="form.doctorId"
+              placeholder="自动分配 · 负载最小优先"
+              size="large"
+              class="!w-full"
+              clearable
+            >
+              <el-option
+                v-for="doc in filteredDoctors"
+                :key="doc.id"
+                :label="`${doc.name}（${doc.title || '医师'}）`"
+                :value="doc.id"
+              />
+            </el-select>
+          </div>
+
+          <!-- 优先级 -->
+          <div>
+            <label class="text-xs text-gray-400 font-medium mb-2 block">就诊类型</label>
+            <div class="grid grid-cols-3 gap-2">
+              <button
+                type="button"
+                class="flex flex-col items-center gap-1 py-3 rounded-xl border-2 transition-all duration-200"
+                :class="!form.isUrgent && !form.isEmergency
+                  ? 'border-blue-500 bg-blue-50 text-blue-600'
+                  : 'border-gray-100 bg-white text-gray-400 hover:border-gray-200'"
+                @click="form.isUrgent = false; form.isEmergency = false"
+              >
+                <i class="bi bi-clipboard-check text-lg"></i>
+                <span class="text-xs font-semibold">普通</span>
+              </button>
+              <button
+                type="button"
+                class="flex flex-col items-center gap-1 py-3 rounded-xl border-2 transition-all duration-200"
+                :class="form.isUrgent && !form.isEmergency
+                  ? 'border-amber-500 bg-amber-50 text-amber-600'
+                  : 'border-gray-100 bg-white text-gray-400 hover:border-gray-200'"
+                @click="form.isUrgent = true; form.isEmergency = false"
+              >
+                <i class="bi bi-exclamation-triangle text-lg"></i>
+                <span class="text-xs font-semibold">加急</span>
+              </button>
+              <button
+                type="button"
+                class="flex flex-col items-center gap-1 py-3 rounded-xl border-2 transition-all duration-200"
+                :class="form.isEmergency
+                  ? 'border-red-500 bg-red-50 text-red-600'
+                  : 'border-gray-100 bg-white text-gray-400 hover:border-gray-200'"
+                @click="form.isUrgent = false; form.isEmergency = true"
+              >
+                <i class="bi bi-lightning-charge text-lg"></i>
+                <span class="text-xs font-semibold">急诊</span>
+              </button>
             </div>
           </div>
-          <div class="mb-3">
-            <div class="form-check form-switch">
-              <input
-                class="form-check-input"
-                type="checkbox"
-                id="isEmergency"
-                v-model="form.isEmergency"
-              />
-              <label class="form-check-label fw-semibold" for="isEmergency">
-                <i class="bi bi-lightning-charge text-danger"></i> 急诊
-              </label>
-            </div>
-          </div>
-          <button
-            type="submit"
-            class="btn btn-primary w-100"
+
+          <!-- 提交按钮 -->
+          <el-button
+            type="primary"
+            native-type="submit"
+            size="large"
+            class="w-full !rounded-xl !h-12 !text-base !font-semibold"
             :disabled="!patientStore.currentPatient"
           >
-            <i class="bi bi-check-circle"></i> 确认挂号
-          </button>
+            <el-icon class="mr-1"><CircleCheck /></el-icon>
+            确认挂号
+          </el-button>
         </form>
-      </div>
-    </div>
+      </el-card>
 
-    <!-- 挂号成功卡片 -->
-    <div v-if="appointmentStore.currentAppointment" class="card shadow-sm border-0 mb-4">
-      <div class="card-header bg-success text-white">
-        <h5 class="mb-0"><i class="bi bi-check-circle"></i> 挂号成功</h5>
-      </div>
-      <div class="card-body">
-        <div class="row">
-          <div class="col-md-6">
-            <p><strong>挂号单号：</strong>{{ appointmentStore.currentAppointment.id }}</p>
-            <p>
-              <strong>排队号码：</strong>
-              <span class="fs-4 text-primary fw-bold">
-                #{{ appointmentStore.currentAppointment.queue_number }}
-              </span>
-            </p>
-            <p>
-              <strong>优先级：</strong>
-              <span :class="getPriorityClass(appointmentStore.currentAppointment.priority)">
-                {{ getPriorityText(appointmentStore.currentAppointment.priority) }}
-              </span>
-            </p>
-          </div>
-          <div class="col-md-6">
-            <p>
-              <strong>分配医生：</strong>{{ appointmentStore.currentAppointment.doctor_name || '-' }}
-            </p>
-            <p>
-              <strong>就诊科室：</strong>{{ appointmentStore.currentAppointment.department || '-' }}
-            </p>
-            <p>
-              <strong>挂号时间：</strong>{{ appointmentStore.currentAppointment.created_at || '-' }}
-            </p>
+      <!-- ========== 挂号成功卡片 ========== -->
+      <el-card
+        v-if="appointmentStore.currentAppointment"
+        shadow="never"
+        class="!border-0 !rounded-2xl overflow-hidden"
+      >
+        <!-- 顶部装饰条 -->
+        <div class="h-1 bg-gradient-to-r from-emerald-400 to-teal-400 -mt-5 -mx-5 mb-4"></div>
+
+        <div class="flex items-center gap-2 mb-4">
+          <span class="w-6 h-6 rounded-full bg-emerald-100 flex items-center justify-center">
+            <i class="bi bi-check-lg text-emerald-500 text-sm"></i>
+          </span>
+          <span class="text-sm font-semibold text-gray-800">挂号成功</span>
+        </div>
+
+        <!-- 排队号码突出显示 -->
+        <div class="text-center py-4 mb-4 rounded-2xl bg-gradient-to-br from-blue-50 to-indigo-50">
+          <div class="text-xs text-gray-400 mb-1">您的排队号码</div>
+          <div class="text-5xl font-black text-blue-600 tracking-tight leading-none">
+            #{{ appointmentStore.currentAppointment.queue_number }}
           </div>
         </div>
-        <hr />
-        <div class="d-flex gap-2">
-          <button class="btn btn-danger" @click="handleCancel">
-            <i class="bi bi-x-circle"></i> 退号
-          </button>
-          <button class="btn btn-warning" @click="handleSettle">
-            <i class="bi bi-cash-coin"></i> 医保结算
-          </button>
-        </div>
-      </div>
-    </div>
 
-    <!-- 历史就诊记录 -->
-    <div v-if="patientStore.currentPatient" class="card shadow-sm border-0">
-      <div class="card-header bg-info text-white d-flex justify-content-between align-items-center">
-        <h5 class="mb-0"><i class="bi bi-clock-history"></i> 历史就诊记录</h5>
-        <button class="btn btn-sm btn-light" @click="refreshHistory">
-          <i class="bi bi-arrow-clockwise"></i> 刷新
-        </button>
-      </div>
-      <div class="card-body">
-        <div v-if="appointmentStore.patientAppointments.length === 0" class="text-center py-4">
-          <i class="bi bi-inbox text-muted" style="font-size: 2rem;"></i>
-          <p class="text-muted mt-2">暂无就诊记录</p>
+        <!-- 详情网格 -->
+        <div class="grid grid-cols-2 gap-x-4 gap-y-3 mb-5 text-sm">
+          <div>
+            <div class="text-xs text-gray-400 mb-0.5">挂号单号</div>
+            <div class="font-semibold text-gray-700">{{ appointmentStore.currentAppointment.id }}</div>
+          </div>
+          <div>
+            <div class="text-xs text-gray-400 mb-0.5">优先级</div>
+            <div class="font-semibold" :title="getPriorityClass(appointmentStore.currentAppointment.priority)" :class="{
+              'text-red-500': appointmentStore.currentAppointment.priority === 'emergency',
+              'text-amber-500': appointmentStore.currentAppointment.priority === 'urgent',
+              'text-gray-500': appointmentStore.currentAppointment.priority === 'normal'
+            }">
+              {{ getPriorityText(appointmentStore.currentAppointment.priority) }}
+            </div>
+          </div>
+          <div>
+            <div class="text-xs text-gray-400 mb-0.5">分配医生</div>
+            <div class="font-semibold text-gray-700">{{ appointmentStore.currentAppointment.doctor_name || '自动分配中' }}</div>
+          </div>
+          <div>
+            <div class="text-xs text-gray-400 mb-0.5">就诊科室</div>
+            <div class="font-semibold text-gray-700">{{ appointmentStore.currentAppointment.department || '-' }}</div>
+          </div>
         </div>
-        <div v-else class="table-responsive">
-          <table class="table table-hover">
-            <thead>
-              <tr>
-                <th>挂号单号</th>
-                <th>排队号码</th>
-                <th>医生</th>
-                <th>科室</th>
-                <th>优先级</th>
-                <th>状态</th>
-                <th>挂号时间</th>
-                <th>操作</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="apt in appointmentStore.patientAppointments" :key="apt.id">
-                <td>{{ apt.id }}</td>
-                <td>#{{ apt.queue_number }}</td>
-                <td>{{ apt.doctor_name || '-' }}</td>
-                <td>{{ apt.department || '-' }}</td>
-                <td>
-                  <span :class="getPriorityClass(apt.priority)">
-                    {{ getPriorityText(apt.priority) }}
-                  </span>
-                </td>
-                <td>
-                  <span :class="getStatusClass(apt.status)">
-                    {{ getStatusText(apt.status) }}
-                  </span>
-                </td>
-                <td>{{ apt.created_at || '-' }}</td>
-                <td>
-                  <div class="btn-group btn-group-sm">
-                    <button
-                      v-if="apt.status === 'waiting'"
-                      class="btn btn-outline-danger"
-                      @click="handleCancelHistory(apt)"
-                    >
-                      退号
-                    </button>
-                    <button
-                      v-if="apt.status === 'completed' && !apt.settled"
-                      class="btn btn-outline-warning"
-                      @click="handleSettleHistory(apt)"
-                    >
-                      结算
-                    </button>
-                    <span v-if="apt.settled" class="badge bg-success">已结算</span>
-                  </div>
-                </td>
-              </tr>
-            </tbody>
-          </table>
+
+        <!-- 操作按钮 -->
+        <div class="grid grid-cols-2 gap-3">
+          <el-button
+            size="large"
+            class="!rounded-xl !h-11 !font-semibold"
+            @click="handleCancel"
+          >
+            <el-icon class="mr-1"><Close /></el-icon>
+            退号
+          </el-button>
+          <el-button
+            type="warning"
+            size="large"
+            class="!rounded-xl !h-11 !font-semibold"
+            @click="handleSettle"
+          >
+            <el-icon class="mr-1"><Wallet /></el-icon>
+            医保结算
+          </el-button>
         </div>
-      </div>
+      </el-card>
+
+      <!-- ========== 历史就诊记录 ========== -->
+      <el-card
+        v-if="patientStore.currentPatient"
+        shadow="never"
+        class="!border-0 !rounded-2xl"
+      >
+        <template #header>
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2 text-gray-800 font-semibold text-sm">
+              <span class="w-6 h-6 rounded-lg bg-violet-50 flex items-center justify-center">
+                <i class="bi bi-clock-history text-violet-500 text-xs"></i>
+              </span>
+              就诊记录
+            </div>
+            <el-button text size="small" @click="refreshHistory" class="!text-gray-400">
+              <el-icon class="mr-0.5"><Refresh /></el-icon> 刷新
+            </el-button>
+          </div>
+        </template>
+
+        <!-- 空状态 -->
+        <div v-if="appointmentStore.patientAppointments.length === 0" class="py-8 text-center">
+          <div class="w-12 h-12 rounded-full bg-gray-50 flex items-center justify-center mx-auto mb-3">
+            <i class="bi bi-inbox text-gray-300 text-xl"></i>
+          </div>
+          <div class="text-sm text-gray-300">暂无就诊记录</div>
+        </div>
+
+        <!-- 记录列表（移动端友好卡片） -->
+        <div v-else class="space-y-2.5">
+          <div
+            v-for="apt in appointmentStore.patientAppointments"
+            :key="apt.id"
+            class="p-3 rounded-xl bg-gray-50/80 hover:bg-gray-50 transition-colors"
+          >
+            <div class="flex items-start justify-between mb-2">
+              <div class="flex items-center gap-2">
+                <span class="text-xl font-black text-blue-600 leading-none">#{{ apt.queue_number }}</span>
+                <span
+                  class="px-2 py-0.5 rounded-full text-xs font-medium"
+                  :title="getStatusClass(apt.status)"
+                  :class="{
+                    'bg-amber-50 text-amber-600': apt.status === 'waiting',
+                    'bg-blue-50 text-blue-600': apt.status === 'in_progress',
+                    'bg-emerald-50 text-emerald-600': apt.status === 'completed',
+                    'bg-gray-100 text-gray-400': apt.status === 'cancelled'
+                  }"
+                >
+                  {{ getStatusText(apt.status) }}
+                </span>
+                <span
+                  v-if="apt.settled"
+                  class="px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-600"
+                >
+                  已结算
+                </span>
+              </div>
+              <span class="text-xs text-gray-300">{{ apt.created_at || '' }}</span>
+            </div>
+
+            <div class="flex items-center gap-3 text-xs text-gray-500 mb-2">
+              <span v-if="apt.doctor_name">
+                <i class="bi bi-person mr-0.5"></i>{{ apt.doctor_name }}
+              </span>
+              <span v-if="apt.department">
+                <i class="bi bi-building mr-0.5"></i>{{ apt.department }}
+              </span>
+              <span :class="{
+                'text-red-400': apt.priority === 'emergency',
+                'text-amber-400': apt.priority === 'urgent',
+                'text-gray-400': apt.priority === 'normal'
+              }">
+                {{ getPriorityText(apt.priority) }}
+              </span>
+            </div>
+
+            <!-- 操作按钮 -->
+            <div class="flex gap-2">
+              <el-button
+                v-if="apt.status === 'waiting'"
+                size="small"
+                class="!rounded-lg !text-xs"
+                @click="handleCancelHistory(apt)"
+              >
+                退号
+              </el-button>
+              <el-button
+                v-if="apt.status === 'completed' && !apt.settled"
+                type="warning"
+                size="small"
+                class="!rounded-lg !text-xs"
+                @click="handleSettleHistory(apt)"
+              >
+                结算
+              </el-button>
+            </div>
+          </div>
+        </div>
+      </el-card>
+
     </div>
   </div>
 </template>
@@ -679,3 +794,46 @@ onMounted(() => {
   doctorStore.loadDoctors()
 })
 </script>
+
+<style scoped>
+/* Element Plus 圆角覆盖 */
+.patient-page :deep(.el-input__wrapper),
+.patient-page :deep(.el-select .el-input__wrapper),
+.patient-page :deep(.el-input-number .el-input__wrapper) {
+  border-radius: 0.75rem;
+  box-shadow: 0 0 0 1px #e5e7eb inset;
+}
+.patient-page :deep(.el-input__wrapper:focus-within),
+.patient-page :deep(.el-select .el-input.is-focus .el-input__wrapper) {
+  box-shadow: 0 0 0 2px #3b82f6 inset;
+}
+
+/* 卡片内部间距 */
+.patient-page :deep(.el-card__header) {
+  padding: 1rem 1.25rem 0.75rem;
+  border-bottom: none;
+}
+.patient-page :deep(.el-card__body) {
+  padding: 0.75rem 1.25rem 1.25rem;
+}
+
+/* 按钮点击缩放 */
+.patient-page .el-button:active {
+  transform: scale(0.97);
+}
+
+/* 提交按钮渐变 */
+.patient-page .el-button--primary:not(:disabled) {
+  background: linear-gradient(135deg, #3b82f6 0%, #6366f1 100%);
+  border: none;
+}
+
+/* 历史记录列表动画 */
+.patient-page .space-y-2\.5 > div {
+  animation: fadeSlideUp 0.3s ease forwards;
+}
+@keyframes fadeSlideUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+</style>
