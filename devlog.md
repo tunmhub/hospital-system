@@ -1,5 +1,33 @@
 # 开发日志
 
+## 2026-06-20 - 患者端 UI 现代化重写
+
+仅重写 `web/src/views/patient/index.vue` 的 `<template>` 和 `<style>`，`<script setup>` 业务逻辑零改动。
+
+### 设计规范
+- **移动端优先**：`max-w-lg` 单列布局，大按钮，大触控区域
+- **视觉风格**：支付宝/微信医疗健康小程序风格，清爽干净
+- **组件替换**：
+  - 姓名搜索 → `el-input` + 搜索图标
+  - 手机号/身份证 → `el-input` 圆角输入框
+  - 年龄 → `el-input-number` 步进器
+  - 性别/医保 → `el-select` 下拉
+  - 科室/医生 → `el-select` 下拉
+  - 就诊类型 → 三段式选择器（普通/加急/急诊），选中高亮
+  - 按钮 → `el-button` 大号圆角
+- **排队号码卡片**：挂号成功后 `text-5xl font-black` 蓝色大号数字突出显示
+- **当前患者指示条**：蓝色渐变 `bg-gradient-to-r from-blue-500 to-indigo-500` + 头像首字母
+- **历史记录**：表格改为卡片列表，移动端友好，状态标签 + 操作按钮
+
+### 修改的文件
+- `web/src/views/patient/index.vue` — template + style 全面重写
+
+### 验证结果
+- `npm run build` 成功 ✅
+- `script setup` 未改动 ✅
+
+---
+
 ## 2026-06-20 - 后端架构重构 + 前端 UI 现代化
 
 完成后端三层架构重构（DI 容器增强、Service 解耦拆分）和前端 UI 现代化升级（Tailwind CSS + Element Plus），并修复患者注册校验缺陷。
