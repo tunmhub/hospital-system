@@ -1,5 +1,32 @@
 # 开发日志
 
+## 2026-06-20 - 大厅排队大屏 UI 重写
+
+仅重写 `web/src/views/screen/index.vue` 的 `<template>` 和 `<style>`，`<script setup>` 拉取数据和自动刷新逻辑零改动。
+
+### 设计规范
+- **深色科幻风格**：`bg-slate-950` 深色背景 + 网格纹理底纹
+- **顶部区域**：左侧标题「门诊排队大屏」青色高亮 + 右侧 `el-select` 深色主题医生选择器
+- **统计条**：三栏数字高亮（等候人数/加急/急诊），大号 `text-3xl font-black`
+- **队列卡片**：
+  - 半透明玻璃态 `bg-white/[0.03]` + `border-white/[0.06]`
+  - 优先级渐变：急诊红、加急琥珀、普通灰
+  - 急诊卡片呼吸脉冲光效 `emergencyPulse` animation
+  - 号码 `text-5xl font-black` 等宽字体
+  - 患者姓名 `text-xl font-bold`
+  - 等待时间底部对齐
+- **呼叫指示器**：第一位患者显示 cyan `animate-ping` 圆点
+- **入场动画**：`cardSlideIn` 卡片从下方滑入
+
+### 修改的文件
+- `web/src/views/screen/index.vue` — template + style 全面重写
+
+### 验证结果
+- `npm run build` 成功 ✅
+- `script setup` 未改动 ✅
+
+---
+
 ## 2026-06-20 - 患者端 UI 现代化重写
 
 仅重写 `web/src/views/patient/index.vue` 的 `<template>` 和 `<style>`，`<script setup>` 业务逻辑零改动。
